@@ -58,12 +58,8 @@ def prepare_data(
 @dsl.component(
     base_image='python:3.11-slim', 
     packages_to_install=[
-        'kubeflow-katib==0.16.0', 
-        'pandas==2.2.2', 
-        'scikit-learn==1.5.1', 
-        'xgboost==2.1.1', 
-        'pandas==2.2.2', 
-        'joblib==1.4.2'
+        'kubeflow-katib', 
+        'pandas'
     ]
 )
 def create_katib_experiment_task(
@@ -83,21 +79,22 @@ def create_katib_experiment_task(
     learning_rate_max: float, 
     cpu_per_trial: int
 ):
-    import pandas as pd
     import kubeflow.katib as katib
 
-    from sklearn.metrics import accuracy_score
-    from xgboost import XGBClassifier
+    def objective(parameters):
+        import pandas as pd
 
-    def objective(paramters):
-        x_train_df = pd.read_csv(x_train.path)
-        y_train_df = pd.read_csv(y_train.path)
+        from xgboost import XGBClassifier
+        from sklearn.metrics import accuracy_score
+
+        x_train_df = pd.read_csv(parameters['x_train_uri'])
+        y_train_df = pd.read_csv(parameters['y_train_uri'])
+
+        x_test_df = pd.read_csv(parameters['x_test_uri'])
+        y_test_df = pd.read_csv(parameters['y_test_uri'])
         
         model = XGBClassifier(n_estimators=parameters['n_estimators'], learning_rate=parameters['learning_rate'])
         model.fit(x_train_df, y_train_df.values.ravel())
-
-        x_test_df = pd.read_csv(x_test.path)
-        y_test_df = pd.read_csv(y_test.path)
     
         y_pred = model.predict(x_test_df)
         accuracy = accuracy_score(y_test_df, y_pred)
@@ -105,8 +102,12 @@ def create_katib_experiment_task(
         print(f"accuracy={accuracy}")
 
     parameters = {
-        'n_estimators': katib.search.int(min=n_estimators_min, max=n_estimators_max), 
-        'learning_rate': katib.search.double(min=learning_rate_min, max=learning_rate_max)
+        'n_estimators': katib.search.int(min=n_estimators_min, max=n_estimators_max, step=1), 
+        'learning_rate': katib.search.double(min=learning_rate_min, max=learning_rate_max, step=0.001), 
+        'x_train_uri': katib.search.categorical(list=[x_train.uri]), 
+        'y_train_uri': katib.search.categorical(list=[y_train.uri]), 
+        'x_test_uri': katib.search.categorical(list=[x_test.uri]), 
+        'y_test_uri': katib.search.categorical(list=[y_test.uri])
     }
 
     client = katib.KatibClient(namespace=client_namespace)
@@ -121,6 +122,13 @@ def create_katib_experiment_task(
         max_trial_count=max_trial_counts, 
         max_failed_trial_count=max_failed_trial_counts, 
         parallel_trial_count=parallel_trial_counts, 
+        packages_to_install=[
+            'pandas', 
+            'scikit-learn', 
+            'xgboost', 
+            'joblib'
+        ],
+        retain_trials=True, 
         resources_per_trial={"cpu": cpu_per_trial}
     )
     client.wait_for_experiment_condition(name=experiment_name)
