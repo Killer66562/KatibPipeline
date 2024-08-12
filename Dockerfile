@@ -1,7 +1,6 @@
 FROM python:3.11-slim
 
-WORKDIR /mnt
-RUN mkdir datasets
+COPY src/datasets /mnt/datasets
 
 WORKDIR /opt
 RUN mkdir xgboost

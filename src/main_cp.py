@@ -1,6 +1,8 @@
 from kfp import dsl, compiler
 from kfp.dsl import Input, Output, Dataset
 
+
+'''
 @dsl.component(
     base_image='python:3.9',
     packages_to_install=['pandas==2.2.2']
@@ -53,19 +55,15 @@ def prepare_data(
     x_test_df.to_csv(x_test_output.path, index=False)
     y_train_df.to_csv(y_train_output.path, index=False)
     y_test_df.to_csv(y_test_output.path, index=False)
-
+'''
 @dsl.component(
-    base_image='python:3.11-slim', 
+    base_image='python:3.10-slim', 
     packages_to_install=[
-        'kubeflow-katib'
+        'kubeflow-katib==0.17.0'
     ]
 )
 def create_katib_experiment_task(
     experiment_name: str, 
-    x_train: Input[Dataset], 
-    y_train: Input[Dataset], 
-    x_test: Input[Dataset],
-    y_test: Input[Dataset],
     experiment_namespace: str, 
     client_namespace: str, 
     max_trial_counts: int, 
@@ -75,65 +73,125 @@ def create_katib_experiment_task(
     n_estimators_max: int,
     learning_rate_min: float, 
     learning_rate_max: float, 
-    cpu_per_trial: int
 ):
-    import kubeflow.katib as katib
+    from kubeflow.katib import KatibClient
+    from kubernetes.client import V1ObjectMeta
+    from kubeflow.katib import V1beta1Experiment
+    from kubeflow.katib import V1beta1AlgorithmSpec
+    from kubeflow.katib import V1beta1ObjectiveSpec
+    from kubeflow.katib import V1beta1FeasibleSpace
+    from kubeflow.katib import V1beta1ExperimentSpec
+    from kubeflow.katib import V1beta1ObjectiveSpec
+    from kubeflow.katib import V1beta1ParameterSpec
+    from kubeflow.katib import V1beta1TrialTemplate
+    from kubeflow.katib import V1beta1TrialParameterSpec
 
-    def objective(parameters):
-        import pandas as pd
+    metadata = V1ObjectMeta(
+        name=experiment_name, 
+        namespace=experiment_namespace
+    )
 
-        x_train_df = pd.read_csv(parameters['x_train_uri'])
-        print(x_train_df)
+    algorithm_spec = V1beta1AlgorithmSpec(
+        algorithm_name="random"
+    )
 
-        y_train_df = pd.read_csv(parameters['y_train_uri'])
-        print(y_train_df)
+    objective_spec = V1beta1ObjectiveSpec(
+        type="maximize",
+        goal= 0.99,
+        objective_metric_name="accuracy",
+    )
 
-        x_test_df = pd.read_csv(parameters['x_test_uri'])
-        print(x_test_df)
+    parameters = [
+        V1beta1ParameterSpec(
+            name="lr",
+            parameter_type="double",
+            feasible_space=V1beta1FeasibleSpace(
+                min=str(learning_rate_min),
+                max=str(learning_rate_max)
+            ),
+        ),
+        V1beta1ParameterSpec(
+            name="ne",
+            parameter_type="int",
+            feasible_space=V1beta1FeasibleSpace(
+                min=str(n_estimators_min),
+                max=str(n_estimators_max)
+            ),
+        ),
+    ]
 
-        y_test_df = pd.read_csv(parameters['y_test_uri'])
-        print(y_test_df)
-
-        print(f"accuracy=0")
-
-    parameters = {
-        'n_estimators': katib.search.int(min=n_estimators_min, max=n_estimators_max, step=1), 
-        'learning_rate': katib.search.double(min=learning_rate_min, max=learning_rate_max, step=0.001), 
-        'x_train_uri': katib.search.categorical(list=[x_train.path]), 
-        'y_train_uri': katib.search.categorical(list=[y_train.path]), 
-        'x_test_uri': katib.search.categorical(list=[x_test.path]), 
-        'y_test_uri': katib.search.categorical(list=[y_test.path])
+    trial_spec={
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "spec": {
+            "template": {
+                "metadata": {
+                    "annotations": {
+                        "sidecar.istio.io/inject": "false"
+                    }
+                },
+                "spec": {
+                    "containers": [
+                        {
+                            "name": "training-container",
+                            "image": "docker.io/killer66562/xgboost-trainer",
+                            "command": [
+                                "python3",
+                                "/opt/xgboost/train.py",
+                                "--lr=${trialParameters.learningRate}",
+                                "--ne=${trialParameters.nEstimators}"
+                            ],
+                            
+                            #"volumeMounts": [
+                            #    {
+                            #        "name": "datasets", 
+                            #        "mountPath": "/mnt/datasets", 
+                            #    }
+                            #]
+                        }
+                    ],
+                    "restartPolicy": "Never"
+                }
+            }
+        }
     }
 
-    client = katib.KatibClient(namespace=client_namespace)
-    experiment = katib.V1beta1Experiment(
-        spec=katib.V1beta1ExperimentSpec(
-            trial_template=katib.V1beta1TrialTemplate(
-                parameters=katib.V1beta1TrialParameterSpec()
+    trial_template=V1beta1TrialTemplate(
+        primary_container_name="training-container",
+        trial_parameters=[
+            V1beta1TrialParameterSpec(
+                name="learningRate",
+                description="Learning rate for the training model",
+                reference="lr"
+            ),
+            V1beta1TrialParameterSpec(
+                name="nEstimators",
+                description="N estimators for the training model",
+                reference="ne"
             )
+        ],
+        trial_spec=trial_spec,
+        retain=True
+    )
+
+    experiment = V1beta1Experiment(
+        api_version="kubeflow.org/v1beta1",
+        kind="Experiment",
+        metadata=metadata,
+        spec=V1beta1ExperimentSpec(
+            max_trial_count=max_trial_counts,
+            parallel_trial_count=parallel_trial_counts,
+            max_failed_trial_count=max_failed_trial_counts,
+            algorithm=algorithm_spec,
+            objective=objective_spec,
+            parameters=parameters,
+            trial_template=trial_template,
         )
     )
-    client.c
-    client.tune(
-        name=experiment_name, 
-        namespace=experiment_namespace, 
-        objective=objective, 
-        parameters=parameters, 
-        objective_metric_name='accuracy', 
-        objective_type='maximize', 
-        objective_goal=0.99, 
-        max_trial_count=max_trial_counts, 
-        max_failed_trial_count=max_failed_trial_counts, 
-        parallel_trial_count=parallel_trial_counts, 
-        packages_to_install=[
-            'pandas', 
-            'fsspec'
-        ],
-        retain_trials=True, 
-        resources_per_trial={"cpu": cpu_per_trial}
-    )
-    client.wait_for_experiment_condition(name=experiment_name)
-    print(client.get_optimal_hyperparameters(experiment_name))
+
+    client = KatibClient(namespace=client_namespace)
+    client.create_experiment(experiment=experiment)
+    
 
 @dsl.pipeline
 def katib_pipeline(
@@ -147,18 +205,15 @@ def katib_pipeline(
     n_estimators_max: int = 2000,
     learning_rate_min: float = 0.01, 
     learning_rate_max: float = 0.2, 
-    cpu_per_trial: int = 1
 ):
+    '''
     load_data_task = load_data()
 
     prepare_data_task = prepare_data(data_input=load_data_task.outputs['data_output'])
+    '''
     
     create_katib_experiment_task(
         experiment_name=experiment_name, 
-        x_train=prepare_data_task.outputs['x_train_output'],
-        x_test=prepare_data_task.outputs['x_test_output'],
-        y_train=prepare_data_task.outputs['y_train_output'],
-        y_test=prepare_data_task.outputs['y_test_output'],
         experiment_namespace=experiment_namespace,
         client_namespace=client_namespace,
         max_trial_counts=max_trial_counts,
@@ -168,7 +223,6 @@ def katib_pipeline(
         n_estimators_max=n_estimators_max,
         learning_rate_min=learning_rate_min,
         learning_rate_max=learning_rate_max,
-        cpu_per_trial=cpu_per_trial
     )
 
 compiler.Compiler().compile(katib_pipeline, 'katib_pipeline_test.yaml')

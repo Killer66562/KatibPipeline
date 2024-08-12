@@ -1,8 +1,9 @@
 # PIPELINE DEFINITION
 # Name: katib-pipeline
+# Description: load_data_task = load_data()
+#              prepare_data_task = prepare_data(data_input=load_data_task.outputs['data_output'])
 # Inputs:
 #    client_namespace: str [Default: 'kubeflow-user-example-com']
-#    cpu_per_trial: int [Default: 1.0]
 #    experiment_name: str
 #    experiment_namespace: str [Default: 'kubeflow-user-example-com']
 #    learning_rate_max: float [Default: 0.2]
@@ -16,28 +17,9 @@ components:
   comp-create-katib-experiment-task:
     executorLabel: exec-create-katib-experiment-task
     inputDefinitions:
-      artifacts:
-        x_test:
-          artifactType:
-            schemaTitle: system.Dataset
-            schemaVersion: 0.0.1
-        x_train:
-          artifactType:
-            schemaTitle: system.Dataset
-            schemaVersion: 0.0.1
-        y_test:
-          artifactType:
-            schemaTitle: system.Dataset
-            schemaVersion: 0.0.1
-        y_train:
-          artifactType:
-            schemaTitle: system.Dataset
-            schemaVersion: 0.0.1
       parameters:
         client_namespace:
           parameterType: STRING
-        cpu_per_trial:
-          parameterType: NUMBER_INTEGER
         experiment_name:
           parameterType: STRING
         experiment_namespace:
@@ -56,40 +38,6 @@ components:
           parameterType: NUMBER_INTEGER
         parallel_trial_counts:
           parameterType: NUMBER_INTEGER
-  comp-load-data:
-    executorLabel: exec-load-data
-    outputDefinitions:
-      artifacts:
-        data_output:
-          artifactType:
-            schemaTitle: system.Dataset
-            schemaVersion: 0.0.1
-  comp-prepare-data:
-    executorLabel: exec-prepare-data
-    inputDefinitions:
-      artifacts:
-        data_input:
-          artifactType:
-            schemaTitle: system.Dataset
-            schemaVersion: 0.0.1
-    outputDefinitions:
-      artifacts:
-        x_test_output:
-          artifactType:
-            schemaTitle: system.Dataset
-            schemaVersion: 0.0.1
-        x_train_output:
-          artifactType:
-            schemaTitle: system.Dataset
-            schemaVersion: 0.0.1
-        y_test_output:
-          artifactType:
-            schemaTitle: system.Dataset
-            schemaVersion: 0.0.1
-        y_train_output:
-          artifactType:
-            schemaTitle: system.Dataset
-            schemaVersion: 0.0.1
 deploymentSpec:
   executors:
     exec-create-katib-experiment-task:
@@ -106,7 +54,7 @@ deploymentSpec:
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
           \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.2.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
-          \  python3 -m pip install --quiet --no-warn-script-location 'kubeflow-katib'\
+          \  python3 -m pip install --quiet --no-warn-script-location 'kubeflow-katib==0.17.0'\
           \ && \"$0\" \"$@\"\n"
         - sh
         - -ec
@@ -120,117 +68,67 @@ deploymentSpec:
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
           \ *\n\ndef create_katib_experiment_task(\n    experiment_name: str, \n \
-          \   x_train: Input[Dataset], \n    y_train: Input[Dataset], \n    x_test:\
-          \ Input[Dataset],\n    y_test: Input[Dataset],\n    experiment_namespace:\
-          \ str, \n    client_namespace: str, \n    max_trial_counts: int, \n    max_failed_trial_counts:\
-          \ int, \n    parallel_trial_counts: int,\n    n_estimators_min: int,\n \
-          \   n_estimators_max: int,\n    learning_rate_min: float, \n    learning_rate_max:\
-          \ float, \n    cpu_per_trial: int\n):\n    import kubeflow.katib as katib\n\
-          \n    def objective(parameters):\n        import pandas as pd\n\n      \
-          \  x_train_df = pd.read_csv(parameters['x_train_uri'])\n        print(x_train_df)\n\
-          \n        y_train_df = pd.read_csv(parameters['y_train_uri'])\n        print(y_train_df)\n\
-          \n        x_test_df = pd.read_csv(parameters['x_test_uri'])\n        print(x_test_df)\n\
-          \n        y_test_df = pd.read_csv(parameters['y_test_uri'])\n        print(y_test_df)\n\
-          \n        print(f\"accuracy=0\")\n\n    parameters = {\n        'n_estimators':\
-          \ katib.search.int(min=n_estimators_min, max=n_estimators_max, step=1),\
-          \ \n        'learning_rate': katib.search.double(min=learning_rate_min,\
-          \ max=learning_rate_max, step=0.001), \n        'x_train_uri': katib.search.categorical(list=[x_train.path]),\
-          \ \n        'y_train_uri': katib.search.categorical(list=[y_train.path]),\
-          \ \n        'x_test_uri': katib.search.categorical(list=[x_test.path]),\
-          \ \n        'y_test_uri': katib.search.categorical(list=[y_test.path])\n\
-          \    }\n\n    client = katib.KatibClient(namespace=client_namespace)\n \
-          \   client.tune(\n        name=experiment_name, \n        namespace=experiment_namespace,\
-          \ \n        objective=objective, \n        parameters=parameters, \n   \
-          \     objective_metric_name='accuracy', \n        objective_type='maximize',\
-          \ \n        objective_goal=0.99, \n        max_trial_count=max_trial_counts,\
-          \ \n        max_failed_trial_count=max_failed_trial_counts, \n        parallel_trial_count=parallel_trial_counts,\
-          \ \n        packages_to_install=[\n            'pandas', \n            'fsspec'\n\
-          \        ],\n        retain_trials=True, \n        resources_per_trial={\"\
-          cpu\": cpu_per_trial}\n    )\n    client.wait_for_experiment_condition(name=experiment_name)\n\
-          \    print(client.get_optimal_hyperparameters(experiment_name))\n\n"
-        image: python:3.11-slim
-    exec-load-data:
-      container:
-        args:
-        - --executor_input
-        - '{{$}}'
-        - --function_to_execute
-        - load_data
-        command:
-        - sh
-        - -c
-        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
-          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.2.0'\
-          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
-          \  python3 -m pip install --quiet --no-warn-script-location 'pandas==2.2.2'\
-          \ && \"$0\" \"$@\"\n"
-        - sh
-        - -ec
-        - 'program_path=$(mktemp -d)
-
-
-          printf "%s" "$0" > "$program_path/ephemeral_component.py"
-
-          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
-
-          '
-        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef load_data(data_output: Output[Dataset]):\n    import pandas as\
-          \ pd\n\n    url = \"https://raw.githubusercontent.com/daniel88516/diabetes-data/main/10k.csv\"\
-          \n    df_data = pd.read_csv(url)\n\n    df_data = df_data.drop(df_data[df_data['diabetes']\
-          \ == 'No Info'].index)\n    df_data = df_data[['gender','age', 'bmi', 'HbA1c_level',\
-          \ 'blood_glucose_level', 'diabetes']]\n    df_data = df_data.dropna(thresh=4)\n\
-          \n    gender_map = {'Male': 0 , 'Female': 1  , 'Other': 2}\n    df_data['gender']\
-          \ = df_data['gender'].map(gender_map)\n    df_data = df_data[df_data['gender']\
-          \ != 2]\n    df_data['age'] = df_data['age'].replace('No Info', df_data['age'].mean())\n\
-          \    df_data['bmi'] = df_data['bmi'].replace('No Info', df_data['bmi'].mean())\n\
-          \    df_data['HbA1c_level'] = df_data['HbA1c_level'].replace('No Info',\
-          \ df_data['HbA1c_level'].mean())\n    df_data['blood_glucose_level'] = df_data['blood_glucose_level'].replace('No\
-          \ Info', df_data['blood_glucose_level'].mean())\n\n    df_data.to_csv(data_output.path)\n\
-          \n"
-        image: python:3.9
-    exec-prepare-data:
-      container:
-        args:
-        - --executor_input
-        - '{{$}}'
-        - --function_to_execute
-        - prepare_data
-        command:
-        - sh
-        - -c
-        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
-          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.2.0'\
-          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
-          \  python3 -m pip install --quiet --no-warn-script-location 'pandas==2.2.2'\
-          \ 'scikit-learn==1.5.1' && \"$0\" \"$@\"\n"
-        - sh
-        - -ec
-        - 'program_path=$(mktemp -d)
-
-
-          printf "%s" "$0" > "$program_path/ephemeral_component.py"
-
-          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
-
-          '
-        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef prepare_data(\n    data_input: Input[Dataset], \n    x_train_output:\
-          \ Output[Dataset], x_test_output: Output[Dataset],\n    y_train_output:\
-          \ Output[Dataset], y_test_output: Output[Dataset]\n):\n    import pandas\
-          \ as pd\n    from sklearn.model_selection import train_test_split\n\n  \
-          \  df_data = pd.read_csv(data_input.path)\n\n    x = df_data.drop(labels=['diabetes'],\
-          \ axis=1)\n    y = df_data[['diabetes']]\n\n    x_train, x_test, y_train,\
-          \ y_test = train_test_split(x, y, test_size=0.2, random_state=42)\n\n  \
-          \  x_train_df = pd.DataFrame(x_train)\n    x_test_df = pd.DataFrame(x_test)\n\
-          \    y_train_df = pd.DataFrame(y_train)\n    y_test_df = pd.DataFrame(y_test)\n\
-          \n    x_train_df.to_csv(x_train_output.path, index=False)\n    x_test_df.to_csv(x_test_output.path,\
-          \ index=False)\n    y_train_df.to_csv(y_train_output.path, index=False)\n\
-          \    y_test_df.to_csv(y_test_output.path, index=False)\n\n"
-        image: python:3.9
+          \   experiment_namespace: str, \n    client_namespace: str, \n    max_trial_counts:\
+          \ int, \n    max_failed_trial_counts: int, \n    parallel_trial_counts:\
+          \ int,\n    n_estimators_min: int,\n    n_estimators_max: int,\n    learning_rate_min:\
+          \ float, \n    learning_rate_max: float, \n):\n    from kubeflow.katib import\
+          \ KatibClient\n    from kubernetes.client import V1ObjectMeta\n    from\
+          \ kubeflow.katib import V1beta1Experiment\n    from kubeflow.katib import\
+          \ V1beta1AlgorithmSpec\n    from kubeflow.katib import V1beta1ObjectiveSpec\n\
+          \    from kubeflow.katib import V1beta1FeasibleSpace\n    from kubeflow.katib\
+          \ import V1beta1ExperimentSpec\n    from kubeflow.katib import V1beta1ObjectiveSpec\n\
+          \    from kubeflow.katib import V1beta1ParameterSpec\n    from kubeflow.katib\
+          \ import V1beta1TrialTemplate\n    from kubeflow.katib import V1beta1TrialParameterSpec\n\
+          \n    metadata = V1ObjectMeta(\n        name=experiment_name, \n       \
+          \ namespace=experiment_namespace\n    )\n\n    algorithm_spec = V1beta1AlgorithmSpec(\n\
+          \        algorithm_name=\"random\"\n    )\n\n    objective_spec = V1beta1ObjectiveSpec(\n\
+          \        type=\"maximize\",\n        goal= 0.99,\n        objective_metric_name=\"\
+          accuracy\",\n    )\n\n    parameters = [\n        V1beta1ParameterSpec(\n\
+          \            name=\"lr\",\n            parameter_type=\"double\",\n    \
+          \        feasible_space=V1beta1FeasibleSpace(\n                min=str(learning_rate_min),\n\
+          \                max=str(learning_rate_max)\n            ),\n        ),\n\
+          \        V1beta1ParameterSpec(\n            name=\"ne\",\n            parameter_type=\"\
+          int\",\n            feasible_space=V1beta1FeasibleSpace(\n             \
+          \   min=str(n_estimators_min),\n                max=str(n_estimators_max)\n\
+          \            ),\n        ),\n    ]\n\n    trial_spec={\n        \"apiVersion\"\
+          : \"batch/v1\",\n        \"kind\": \"Job\",\n        \"spec\": {\n     \
+          \       \"template\": {\n                \"metadata\": {\n             \
+          \       \"annotations\": {\n                        \"sidecar.istio.io/inject\"\
+          : \"false\"\n                    }\n                },\n               \
+          \ \"spec\": {\n                    \"containers\": [\n                 \
+          \       {\n                            \"name\": \"training-container\"\
+          ,\n                            \"image\": \"docker.io/killer66562/xgboost-trainer\"\
+          ,\n                            \"command\": [\n                        \
+          \        \"python3\",\n                                \"/opt/xgboost/train.py\"\
+          ,\n                                \"--lr=${trialParameters.learningRate}\"\
+          ,\n                                \"--ne=${trialParameters.nEstimators}\"\
+          \n                            ],\n\n                            #\"volumeMounts\"\
+          : [\n                            #    {\n                            # \
+          \       \"name\": \"datasets\", \n                            #        \"\
+          mountPath\": \"/mnt/datasets\", \n                            #    }\n \
+          \                           #]\n                        }\n            \
+          \        ],\n                    \"restartPolicy\": \"Never\"\n        \
+          \        }\n            }\n        }\n    }\n\n    trial_template=V1beta1TrialTemplate(\n\
+          \        primary_container_name=\"training-container\",\n        trial_parameters=[\n\
+          \            V1beta1TrialParameterSpec(\n                name=\"learningRate\"\
+          ,\n                description=\"Learning rate for the training model\"\
+          ,\n                reference=\"lr\"\n            ),\n            V1beta1TrialParameterSpec(\n\
+          \                name=\"nEstimators\",\n                description=\"N\
+          \ estimators for the training model\",\n                reference=\"ne\"\
+          \n            )\n        ],\n        trial_spec=trial_spec,\n        retain=True\n\
+          \    )\n\n    experiment = V1beta1Experiment(\n        api_version=\"kubeflow.org/v1beta1\"\
+          ,\n        kind=\"Experiment\",\n        metadata=metadata,\n        spec=V1beta1ExperimentSpec(\n\
+          \            max_trial_count=max_trial_counts,\n            parallel_trial_count=parallel_trial_counts,\n\
+          \            max_failed_trial_count=max_failed_trial_counts,\n         \
+          \   algorithm=algorithm_spec,\n            objective=objective_spec,\n \
+          \           parameters=parameters,\n            trial_template=trial_template,\n\
+          \        )\n    )\n\n    client = KatibClient(namespace=client_namespace)\n\
+          \    client.create_experiment(experiment=experiment)\n\n"
+        image: python:3.10-slim
 pipelineInfo:
+  description: 'load_data_task = load_data()
+
+    prepare_data_task = prepare_data(data_input=load_data_task.outputs[''data_output''])'
   name: katib-pipeline
 root:
   dag:
@@ -240,31 +138,10 @@ root:
           enableCache: true
         componentRef:
           name: comp-create-katib-experiment-task
-        dependentTasks:
-        - prepare-data
         inputs:
-          artifacts:
-            x_test:
-              taskOutputArtifact:
-                outputArtifactKey: x_test_output
-                producerTask: prepare-data
-            x_train:
-              taskOutputArtifact:
-                outputArtifactKey: x_train_output
-                producerTask: prepare-data
-            y_test:
-              taskOutputArtifact:
-                outputArtifactKey: y_test_output
-                producerTask: prepare-data
-            y_train:
-              taskOutputArtifact:
-                outputArtifactKey: y_train_output
-                producerTask: prepare-data
           parameters:
             client_namespace:
               componentInputParameter: client_namespace
-            cpu_per_trial:
-              componentInputParameter: cpu_per_trial
             experiment_name:
               componentInputParameter: experiment_name
             experiment_namespace:
@@ -285,38 +162,12 @@ root:
               componentInputParameter: parallel_trial_counts
         taskInfo:
           name: create-katib-experiment-task
-      load-data:
-        cachingOptions:
-          enableCache: true
-        componentRef:
-          name: comp-load-data
-        taskInfo:
-          name: load-data
-      prepare-data:
-        cachingOptions:
-          enableCache: true
-        componentRef:
-          name: comp-prepare-data
-        dependentTasks:
-        - load-data
-        inputs:
-          artifacts:
-            data_input:
-              taskOutputArtifact:
-                outputArtifactKey: data_output
-                producerTask: load-data
-        taskInfo:
-          name: prepare-data
   inputDefinitions:
     parameters:
       client_namespace:
         defaultValue: kubeflow-user-example-com
         isOptional: true
         parameterType: STRING
-      cpu_per_trial:
-        defaultValue: 1.0
-        isOptional: true
-        parameterType: NUMBER_INTEGER
       experiment_name:
         parameterType: STRING
       experiment_namespace:
