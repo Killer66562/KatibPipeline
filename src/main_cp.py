@@ -73,6 +73,12 @@ def create_katib_experiment_task(
     n_estimators_max: int,
     learning_rate_min: float, 
     learning_rate_max: float, 
+    random_state_min: int, 
+    random_state_max: int, 
+    x_train_path: str, 
+    x_test_path: str,
+    y_train_path: str, 
+    y_test_path: str
 ):
     from kubeflow.katib import KatibClient
     from kubernetes.client import V1ObjectMeta
@@ -118,6 +124,21 @@ def create_katib_experiment_task(
                 max=str(n_estimators_max)
             ),
         ),
+        V1beta1ParameterSpec(
+            name="rs",
+            parameter_type="int",
+            feasible_space=V1beta1FeasibleSpace(
+                min=str(random_state_min),
+                max=str(random_state_max)
+            ),
+        ),
+        V1beta1ParameterSpec(
+            name="booster",
+            parameter_type="str",
+            feasible_space=V1beta1FeasibleSpace(
+                list=['gbtree', 'gblinear', 'dart']
+            ),
+        )
     ]
 
     trial_spec={
@@ -139,8 +160,14 @@ def create_katib_experiment_task(
                                 "python3",
                                 "/opt/xgboost/train.py",
                                 "--lr=${trialParameters.learningRate}",
-                                "--ne=${trialParameters.nEstimators}"
-                            ],
+                                "--ne=${trialParameters.nEstimators}",
+                                "--rs=${trialParameters.randomState}",
+                                "--booster=${trialParameters.booster}",
+                                f"--x_train_path={x_train_path}",
+                                f"--x_test_path={x_test_path}",
+                                f"--y_train_path={y_train_path}",
+                                f"--y_test_path={y_test_path}"
+                            ]
                             
                             #"volumeMounts": [
                             #    {
@@ -205,6 +232,12 @@ def katib_pipeline(
     n_estimators_max: int = 2000,
     learning_rate_min: float = 0.01, 
     learning_rate_max: float = 0.2, 
+    random_state_min: int = 0, 
+    random_state_max: int = 100, 
+    x_train_path: str = "datasets/x_train.csv", 
+    x_test_path: str = "datasets/x_test.csv", 
+    y_train_path: str = "datasets/y_train.csv", 
+    y_test_path: str = "datasets/y_test.csv"
 ):
     '''
     load_data_task = load_data()
@@ -222,7 +255,13 @@ def katib_pipeline(
         n_estimators_min=n_estimators_min,
         n_estimators_max=n_estimators_max,
         learning_rate_min=learning_rate_min,
-        learning_rate_max=learning_rate_max,
+        learning_rate_max=learning_rate_max, 
+        random_state_min=random_state_min, 
+        random_state_max=random_state_max, 
+        x_train_path=x_train_path, 
+        x_test_path=x_test_path, 
+        y_train_path=y_train_path, 
+        y_test_path=y_test_path
     )
 
 compiler.Compiler().compile(katib_pipeline, 'katib_pipeline_test.yaml')

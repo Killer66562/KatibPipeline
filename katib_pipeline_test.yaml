@@ -13,6 +13,12 @@
 #    n_estimators_max: int [Default: 2000.0]
 #    n_estimators_min: int [Default: 1000.0]
 #    parallel_trial_counts: int [Default: 1.0]
+#    random_state_max: int [Default: 100.0]
+#    random_state_min: int [Default: 0.0]
+#    x_test_path: str [Default: 'datasets/x_test.csv']
+#    x_train_path: str [Default: 'datasets/x_train.csv']
+#    y_test_path: str [Default: 'datasets/y_test.csv']
+#    y_train_path: str [Default: 'datasets/y_train.csv']
 components:
   comp-create-katib-experiment-task:
     executorLabel: exec-create-katib-experiment-task
@@ -38,6 +44,18 @@ components:
           parameterType: NUMBER_INTEGER
         parallel_trial_counts:
           parameterType: NUMBER_INTEGER
+        random_state_max:
+          parameterType: NUMBER_INTEGER
+        random_state_min:
+          parameterType: NUMBER_INTEGER
+        x_test_path:
+          parameterType: STRING
+        x_train_path:
+          parameterType: STRING
+        y_test_path:
+          parameterType: STRING
+        y_train_path:
+          parameterType: STRING
 deploymentSpec:
   executors:
     exec-create-katib-experiment-task:
@@ -71,10 +89,12 @@ deploymentSpec:
           \   experiment_namespace: str, \n    client_namespace: str, \n    max_trial_counts:\
           \ int, \n    max_failed_trial_counts: int, \n    parallel_trial_counts:\
           \ int,\n    n_estimators_min: int,\n    n_estimators_max: int,\n    learning_rate_min:\
-          \ float, \n    learning_rate_max: float, \n):\n    from kubeflow.katib import\
-          \ KatibClient\n    from kubernetes.client import V1ObjectMeta\n    from\
-          \ kubeflow.katib import V1beta1Experiment\n    from kubeflow.katib import\
-          \ V1beta1AlgorithmSpec\n    from kubeflow.katib import V1beta1ObjectiveSpec\n\
+          \ float, \n    learning_rate_max: float, \n    random_state_min: int, \n\
+          \    random_state_max: int, \n    x_train_path: str, \n    x_test_path:\
+          \ str,\n    y_train_path: str, \n    y_test_path: str\n):\n    from kubeflow.katib\
+          \ import KatibClient\n    from kubernetes.client import V1ObjectMeta\n \
+          \   from kubeflow.katib import V1beta1Experiment\n    from kubeflow.katib\
+          \ import V1beta1AlgorithmSpec\n    from kubeflow.katib import V1beta1ObjectiveSpec\n\
           \    from kubeflow.katib import V1beta1FeasibleSpace\n    from kubeflow.katib\
           \ import V1beta1ExperimentSpec\n    from kubeflow.katib import V1beta1ObjectiveSpec\n\
           \    from kubeflow.katib import V1beta1ParameterSpec\n    from kubeflow.katib\
@@ -90,19 +110,31 @@ deploymentSpec:
           \        V1beta1ParameterSpec(\n            name=\"ne\",\n            parameter_type=\"\
           int\",\n            feasible_space=V1beta1FeasibleSpace(\n             \
           \   min=str(n_estimators_min),\n                max=str(n_estimators_max)\n\
-          \            ),\n        ),\n    ]\n\n    trial_spec={\n        \"apiVersion\"\
-          : \"batch/v1\",\n        \"kind\": \"Job\",\n        \"spec\": {\n     \
-          \       \"template\": {\n                \"metadata\": {\n             \
-          \       \"annotations\": {\n                        \"sidecar.istio.io/inject\"\
-          : \"false\"\n                    }\n                },\n               \
-          \ \"spec\": {\n                    \"containers\": [\n                 \
-          \       {\n                            \"name\": \"training-container\"\
-          ,\n                            \"image\": \"docker.io/killer66562/xgboost-trainer\"\
-          ,\n                            \"command\": [\n                        \
-          \        \"python3\",\n                                \"/opt/xgboost/train.py\"\
+          \            ),\n        ),\n        V1beta1ParameterSpec(\n           \
+          \ name=\"rs\",\n            parameter_type=\"int\",\n            feasible_space=V1beta1FeasibleSpace(\n\
+          \                min=str(random_state_min),\n                max=str(random_state_max)\n\
+          \            ),\n        ),\n        V1beta1ParameterSpec(\n           \
+          \ name=\"booster\",\n            parameter_type=\"str\",\n            feasible_space=V1beta1FeasibleSpace(\n\
+          \                list=['gbtree', 'gblinear', 'dart']\n            ),\n \
+          \       )\n    ]\n\n    trial_spec={\n        \"apiVersion\": \"batch/v1\"\
+          ,\n        \"kind\": \"Job\",\n        \"spec\": {\n            \"template\"\
+          : {\n                \"metadata\": {\n                    \"annotations\"\
+          : {\n                        \"sidecar.istio.io/inject\": \"false\"\n  \
+          \                  }\n                },\n                \"spec\": {\n\
+          \                    \"containers\": [\n                        {\n    \
+          \                        \"name\": \"training-container\",\n           \
+          \                 \"image\": \"docker.io/killer66562/xgboost-trainer\",\n\
+          \                            \"command\": [\n                          \
+          \      \"python3\",\n                                \"/opt/xgboost/train.py\"\
           ,\n                                \"--lr=${trialParameters.learningRate}\"\
           ,\n                                \"--ne=${trialParameters.nEstimators}\"\
-          \n                            ],\n\n                            #\"volumeMounts\"\
+          ,\n                                \"--rs=${trialParameters.randomState}\"\
+          ,\n                                \"--booster=${trialParameters.booster}\"\
+          ,\n                                f\"--x_train_path={x_train_path}\",\n\
+          \                                f\"--x_test_path={x_test_path}\",\n   \
+          \                             f\"--y_train_path={y_train_path}\",\n    \
+          \                            f\"--y_test_path={y_test_path}\"\n        \
+          \                    ]\n\n                            #\"volumeMounts\"\
           : [\n                            #    {\n                            # \
           \       \"name\": \"datasets\", \n                            #        \"\
           mountPath\": \"/mnt/datasets\", \n                            #    }\n \
@@ -160,6 +192,18 @@ root:
               componentInputParameter: n_estimators_min
             parallel_trial_counts:
               componentInputParameter: parallel_trial_counts
+            random_state_max:
+              componentInputParameter: random_state_max
+            random_state_min:
+              componentInputParameter: random_state_min
+            x_test_path:
+              componentInputParameter: x_test_path
+            x_train_path:
+              componentInputParameter: x_train_path
+            y_test_path:
+              componentInputParameter: y_test_path
+            y_train_path:
+              componentInputParameter: y_train_path
         taskInfo:
           name: create-katib-experiment-task
   inputDefinitions:
@@ -202,5 +246,29 @@ root:
         defaultValue: 1.0
         isOptional: true
         parameterType: NUMBER_INTEGER
+      random_state_max:
+        defaultValue: 100.0
+        isOptional: true
+        parameterType: NUMBER_INTEGER
+      random_state_min:
+        defaultValue: 0.0
+        isOptional: true
+        parameterType: NUMBER_INTEGER
+      x_test_path:
+        defaultValue: datasets/x_test.csv
+        isOptional: true
+        parameterType: STRING
+      x_train_path:
+        defaultValue: datasets/x_train.csv
+        isOptional: true
+        parameterType: STRING
+      y_test_path:
+        defaultValue: datasets/y_test.csv
+        isOptional: true
+        parameterType: STRING
+      y_train_path:
+        defaultValue: datasets/y_train.csv
+        isOptional: true
+        parameterType: STRING
 schemaVersion: 2.1.0
 sdkVersion: kfp-2.2.0
