@@ -69,8 +69,8 @@ def create_katib_experiment_task(
     max_trial_counts: int, 
     max_failed_trial_counts: int, 
     parallel_trial_counts: int,
-    n_estimators_min: int,
-    n_estimators_max: int,
+    n_estimators: int,
+    booster: str, 
     learning_rate_min: float, 
     learning_rate_max: float, 
     random_state_min: int, 
@@ -117,26 +117,11 @@ def create_katib_experiment_task(
             ),
         ),
         V1beta1ParameterSpec(
-            name="ne",
-            parameter_type="int",
-            feasible_space=V1beta1FeasibleSpace(
-                min=str(n_estimators_min),
-                max=str(n_estimators_max)
-            ),
-        ),
-        V1beta1ParameterSpec(
             name="rs",
             parameter_type="int",
             feasible_space=V1beta1FeasibleSpace(
                 min=str(random_state_min),
                 max=str(random_state_max)
-            ),
-        ),
-        V1beta1ParameterSpec(
-            name="booster",
-            parameter_type="categorical",
-            feasible_space=V1beta1FeasibleSpace(
-                list=['gbtree', 'gblinear', 'dart']
             ),
         )
     ]
@@ -160,9 +145,9 @@ def create_katib_experiment_task(
                                 "python3",
                                 "/opt/xgboost/train.py",
                                 "--lr=${trialParameters.learningRate}",
-                                "--ne=${trialParameters.nEstimators}",
+                                f"--ne={n_estimators}",
                                 "--rs=${trialParameters.randomState}",
-                                "--booster=${trialParameters.booster}",
+                                f"--booster={booster}",
                                 f"--x_train_path={x_train_path}",
                                 f"--x_test_path={x_test_path}",
                                 f"--y_train_path={y_train_path}",
@@ -192,19 +177,9 @@ def create_katib_experiment_task(
                 reference="lr"
             ),
             V1beta1TrialParameterSpec(
-                name="nEstimators",
-                description="N estimators for the training model",
-                reference="ne"
-            ), 
-            V1beta1TrialParameterSpec(
                 name="randomState",
                 description="Random state for the training model",
                 reference="rs"
-            ), 
-            V1beta1TrialParameterSpec(
-                name="booster",
-                description="Booster for the training model",
-                reference="booster"
             )
         ],
         trial_spec=trial_spec,
@@ -236,11 +211,11 @@ def katib_pipeline(
     experiment_name: str, 
     experiment_namespace: str = 'kubeflow-user-example-com', 
     client_namespace: str = 'kubeflow-user-example-com', 
-    max_trial_counts: int = 6, 
-    max_failed_trial_counts: int = 3, 
-    parallel_trial_counts: int = 1,
-    n_estimators_min: int = 1000,
-    n_estimators_max: int = 2000,
+    max_trial_counts: int = 10, 
+    max_failed_trial_counts: int = 5, 
+    parallel_trial_counts: int = 2,
+    n_estimators: int = 3000,
+    booster: str = 'gbtree', 
     learning_rate_min: float = 0.01, 
     learning_rate_max: float = 0.2, 
     random_state_min: int = 1, 
@@ -256,15 +231,15 @@ def katib_pipeline(
     prepare_data_task = prepare_data(data_input=load_data_task.outputs['data_output'])
     '''
     
-    katib_experiment_task = create_katib_experiment_task(
+    create_katib_experiment_task(
         experiment_name=experiment_name, 
         experiment_namespace=experiment_namespace,
         client_namespace=client_namespace,
         max_trial_counts=max_trial_counts,
         max_failed_trial_counts=max_failed_trial_counts,
         parallel_trial_counts=parallel_trial_counts,
-        n_estimators_min=n_estimators_min,
-        n_estimators_max=n_estimators_max,
+        n_estimators=n_estimators, 
+        booster=booster, 
         learning_rate_min=learning_rate_min,
         learning_rate_max=learning_rate_max, 
         random_state_min=random_state_min, 

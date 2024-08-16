@@ -3,16 +3,16 @@
 # Description: load_data_task = load_data()
 #              prepare_data_task = prepare_data(data_input=load_data_task.outputs['data_output'])
 # Inputs:
+#    booster: str [Default: 'gbtree']
 #    client_namespace: str [Default: 'kubeflow-user-example-com']
 #    experiment_name: str
 #    experiment_namespace: str [Default: 'kubeflow-user-example-com']
 #    learning_rate_max: float [Default: 0.2]
 #    learning_rate_min: float [Default: 0.01]
-#    max_failed_trial_counts: int [Default: 3.0]
-#    max_trial_counts: int [Default: 6.0]
-#    n_estimators_max: int [Default: 2000.0]
-#    n_estimators_min: int [Default: 1000.0]
-#    parallel_trial_counts: int [Default: 1.0]
+#    max_failed_trial_counts: int [Default: 5.0]
+#    max_trial_counts: int [Default: 10.0]
+#    n_estimators: int [Default: 3000.0]
+#    parallel_trial_counts: int [Default: 2.0]
 #    random_state_max: int [Default: 100.0]
 #    random_state_min: int [Default: 1.0]
 #    x_test_path: str [Default: 'datasets/x_test.csv']
@@ -24,6 +24,8 @@ components:
     executorLabel: exec-create-katib-experiment-task
     inputDefinitions:
       parameters:
+        booster:
+          parameterType: STRING
         client_namespace:
           parameterType: STRING
         experiment_name:
@@ -38,9 +40,7 @@ components:
           parameterType: NUMBER_INTEGER
         max_trial_counts:
           parameterType: NUMBER_INTEGER
-        n_estimators_max:
-          parameterType: NUMBER_INTEGER
-        n_estimators_min:
+        n_estimators:
           parameterType: NUMBER_INTEGER
         parallel_trial_counts:
           parameterType: NUMBER_INTEGER
@@ -88,7 +88,7 @@ deploymentSpec:
           \ *\n\ndef create_katib_experiment_task(\n    experiment_name: str, \n \
           \   experiment_namespace: str, \n    client_namespace: str, \n    max_trial_counts:\
           \ int, \n    max_failed_trial_counts: int, \n    parallel_trial_counts:\
-          \ int,\n    n_estimators_min: int,\n    n_estimators_max: int,\n    learning_rate_min:\
+          \ int,\n    n_estimators: int,\n    booster: str, \n    learning_rate_min:\
           \ float, \n    learning_rate_max: float, \n    random_state_min: int, \n\
           \    random_state_max: int, \n    x_train_path: str, \n    x_test_path:\
           \ str,\n    y_train_path: str, \n    y_test_path: str\n):\n    from kubeflow.katib\
@@ -107,55 +107,43 @@ deploymentSpec:
           \            name=\"lr\",\n            parameter_type=\"double\",\n    \
           \        feasible_space=V1beta1FeasibleSpace(\n                min=str(learning_rate_min),\n\
           \                max=str(learning_rate_max)\n            ),\n        ),\n\
-          \        V1beta1ParameterSpec(\n            name=\"ne\",\n            parameter_type=\"\
+          \        V1beta1ParameterSpec(\n            name=\"rs\",\n            parameter_type=\"\
           int\",\n            feasible_space=V1beta1FeasibleSpace(\n             \
-          \   min=str(n_estimators_min),\n                max=str(n_estimators_max)\n\
-          \            ),\n        ),\n        V1beta1ParameterSpec(\n           \
-          \ name=\"rs\",\n            parameter_type=\"int\",\n            feasible_space=V1beta1FeasibleSpace(\n\
-          \                min=str(random_state_min),\n                max=str(random_state_max)\n\
-          \            ),\n        ),\n        V1beta1ParameterSpec(\n           \
-          \ name=\"booster\",\n            parameter_type=\"categorical\",\n     \
-          \       feasible_space=V1beta1FeasibleSpace(\n                list=['gbtree',\
-          \ 'gblinear', 'dart']\n            ),\n        )\n    ]\n\n    trial_spec={\n\
-          \        \"apiVersion\": \"batch/v1\",\n        \"kind\": \"Job\",\n   \
-          \     \"spec\": {\n            \"template\": {\n                \"metadata\"\
-          : {\n                    \"annotations\": {\n                        \"\
-          sidecar.istio.io/inject\": \"false\"\n                    }\n          \
-          \      },\n                \"spec\": {\n                    \"containers\"\
-          : [\n                        {\n                            \"name\": \"\
-          training-container\",\n                            \"image\": \"docker.io/killer66562/xgboost-trainer\"\
+          \   min=str(random_state_min),\n                max=str(random_state_max)\n\
+          \            ),\n        )\n    ]\n\n    trial_spec={\n        \"apiVersion\"\
+          : \"batch/v1\",\n        \"kind\": \"Job\",\n        \"spec\": {\n     \
+          \       \"template\": {\n                \"metadata\": {\n             \
+          \       \"annotations\": {\n                        \"sidecar.istio.io/inject\"\
+          : \"false\"\n                    }\n                },\n               \
+          \ \"spec\": {\n                    \"containers\": [\n                 \
+          \       {\n                            \"name\": \"training-container\"\
+          ,\n                            \"image\": \"docker.io/killer66562/xgboost-trainer\"\
           ,\n                            \"command\": [\n                        \
           \        \"python3\",\n                                \"/opt/xgboost/train.py\"\
           ,\n                                \"--lr=${trialParameters.learningRate}\"\
-          ,\n                                \"--ne=${trialParameters.nEstimators}\"\
-          ,\n                                \"--rs=${trialParameters.randomState}\"\
-          ,\n                                \"--booster=${trialParameters.booster}\"\
-          ,\n                                f\"--x_train_path={x_train_path}\",\n\
-          \                                f\"--x_test_path={x_test_path}\",\n   \
-          \                             f\"--y_train_path={y_train_path}\",\n    \
-          \                            f\"--y_test_path={y_test_path}\"\n        \
-          \                    ]\n\n                            #\"volumeMounts\"\
-          : [\n                            #    {\n                            # \
-          \       \"name\": \"datasets\", \n                            #        \"\
-          mountPath\": \"/mnt/datasets\", \n                            #    }\n \
-          \                           #]\n                        }\n            \
-          \        ],\n                    \"restartPolicy\": \"Never\"\n        \
-          \        }\n            }\n        }\n    }\n\n    trial_template=V1beta1TrialTemplate(\n\
+          ,\n                                f\"--ne={n_estimators}\",\n         \
+          \                       \"--rs=${trialParameters.randomState}\",\n     \
+          \                           f\"--booster={booster}\",\n                \
+          \                f\"--x_train_path={x_train_path}\",\n                 \
+          \               f\"--x_test_path={x_test_path}\",\n                    \
+          \            f\"--y_train_path={y_train_path}\",\n                     \
+          \           f\"--y_test_path={y_test_path}\"\n                         \
+          \   ]\n\n                            #\"volumeMounts\": [\n            \
+          \                #    {\n                            #        \"name\":\
+          \ \"datasets\", \n                            #        \"mountPath\": \"\
+          /mnt/datasets\", \n                            #    }\n                \
+          \            #]\n                        }\n                    ],\n   \
+          \                 \"restartPolicy\": \"Never\"\n                }\n    \
+          \        }\n        }\n    }\n\n    trial_template=V1beta1TrialTemplate(\n\
           \        primary_container_name=\"training-container\",\n        trial_parameters=[\n\
           \            V1beta1TrialParameterSpec(\n                name=\"learningRate\"\
           ,\n                description=\"Learning rate for the training model\"\
           ,\n                reference=\"lr\"\n            ),\n            V1beta1TrialParameterSpec(\n\
-          \                name=\"nEstimators\",\n                description=\"N\
-          \ estimators for the training model\",\n                reference=\"ne\"\
-          \n            ), \n            V1beta1TrialParameterSpec(\n            \
-          \    name=\"randomState\",\n                description=\"Random state for\
-          \ the training model\",\n                reference=\"rs\"\n            ),\
-          \ \n            V1beta1TrialParameterSpec(\n                name=\"booster\"\
-          ,\n                description=\"Booster for the training model\",\n   \
-          \             reference=\"booster\"\n            )\n        ],\n       \
-          \ trial_spec=trial_spec,\n        retain=True\n    )\n\n    experiment =\
-          \ V1beta1Experiment(\n        api_version=\"kubeflow.org/v1beta1\",\n  \
-          \      kind=\"Experiment\",\n        metadata=metadata,\n        spec=V1beta1ExperimentSpec(\n\
+          \                name=\"randomState\",\n                description=\"Random\
+          \ state for the training model\",\n                reference=\"rs\"\n  \
+          \          )\n        ],\n        trial_spec=trial_spec,\n        retain=True\n\
+          \    )\n\n    experiment = V1beta1Experiment(\n        api_version=\"kubeflow.org/v1beta1\"\
+          ,\n        kind=\"Experiment\",\n        metadata=metadata,\n        spec=V1beta1ExperimentSpec(\n\
           \            max_trial_count=max_trial_counts,\n            parallel_trial_count=parallel_trial_counts,\n\
           \            max_failed_trial_count=max_failed_trial_counts,\n         \
           \   algorithm=algorithm_spec,\n            objective=objective_spec,\n \
@@ -179,6 +167,8 @@ root:
           name: comp-create-katib-experiment-task
         inputs:
           parameters:
+            booster:
+              componentInputParameter: booster
             client_namespace:
               componentInputParameter: client_namespace
             experiment_name:
@@ -193,10 +183,8 @@ root:
               componentInputParameter: max_failed_trial_counts
             max_trial_counts:
               componentInputParameter: max_trial_counts
-            n_estimators_max:
-              componentInputParameter: n_estimators_max
-            n_estimators_min:
-              componentInputParameter: n_estimators_min
+            n_estimators:
+              componentInputParameter: n_estimators
             parallel_trial_counts:
               componentInputParameter: parallel_trial_counts
             random_state_max:
@@ -215,6 +203,10 @@ root:
           name: create-katib-experiment-task
   inputDefinitions:
     parameters:
+      booster:
+        defaultValue: gbtree
+        isOptional: true
+        parameterType: STRING
       client_namespace:
         defaultValue: kubeflow-user-example-com
         isOptional: true
@@ -234,23 +226,19 @@ root:
         isOptional: true
         parameterType: NUMBER_DOUBLE
       max_failed_trial_counts:
-        defaultValue: 3.0
+        defaultValue: 5.0
         isOptional: true
         parameterType: NUMBER_INTEGER
       max_trial_counts:
-        defaultValue: 6.0
+        defaultValue: 10.0
         isOptional: true
         parameterType: NUMBER_INTEGER
-      n_estimators_max:
-        defaultValue: 2000.0
-        isOptional: true
-        parameterType: NUMBER_INTEGER
-      n_estimators_min:
-        defaultValue: 1000.0
+      n_estimators:
+        defaultValue: 3000.0
         isOptional: true
         parameterType: NUMBER_INTEGER
       parallel_trial_counts:
-        defaultValue: 1.0
+        defaultValue: 2.0
         isOptional: true
         parameterType: NUMBER_INTEGER
       random_state_max:
