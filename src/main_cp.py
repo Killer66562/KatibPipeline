@@ -134,7 +134,7 @@ def create_katib_experiment_task(
         ),
         V1beta1ParameterSpec(
             name="booster",
-            parameter_type="str",
+            parameter_type="categorical",
             feasible_space=V1beta1FeasibleSpace(
                 list=['gbtree', 'gblinear', 'dart']
             ),

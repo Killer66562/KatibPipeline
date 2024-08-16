@@ -114,18 +114,18 @@ deploymentSpec:
           \ name=\"rs\",\n            parameter_type=\"int\",\n            feasible_space=V1beta1FeasibleSpace(\n\
           \                min=str(random_state_min),\n                max=str(random_state_max)\n\
           \            ),\n        ),\n        V1beta1ParameterSpec(\n           \
-          \ name=\"booster\",\n            parameter_type=\"str\",\n            feasible_space=V1beta1FeasibleSpace(\n\
-          \                list=['gbtree', 'gblinear', 'dart']\n            ),\n \
-          \       )\n    ]\n\n    trial_spec={\n        \"apiVersion\": \"batch/v1\"\
-          ,\n        \"kind\": \"Job\",\n        \"spec\": {\n            \"template\"\
-          : {\n                \"metadata\": {\n                    \"annotations\"\
-          : {\n                        \"sidecar.istio.io/inject\": \"false\"\n  \
-          \                  }\n                },\n                \"spec\": {\n\
-          \                    \"containers\": [\n                        {\n    \
-          \                        \"name\": \"training-container\",\n           \
-          \                 \"image\": \"docker.io/killer66562/xgboost-trainer\",\n\
-          \                            \"command\": [\n                          \
-          \      \"python3\",\n                                \"/opt/xgboost/train.py\"\
+          \ name=\"booster\",\n            parameter_type=\"categorical\",\n     \
+          \       feasible_space=V1beta1FeasibleSpace(\n                list=['gbtree',\
+          \ 'gblinear', 'dart']\n            ),\n        )\n    ]\n\n    trial_spec={\n\
+          \        \"apiVersion\": \"batch/v1\",\n        \"kind\": \"Job\",\n   \
+          \     \"spec\": {\n            \"template\": {\n                \"metadata\"\
+          : {\n                    \"annotations\": {\n                        \"\
+          sidecar.istio.io/inject\": \"false\"\n                    }\n          \
+          \      },\n                \"spec\": {\n                    \"containers\"\
+          : [\n                        {\n                            \"name\": \"\
+          training-container\",\n                            \"image\": \"docker.io/killer66562/xgboost-trainer\"\
+          ,\n                            \"command\": [\n                        \
+          \        \"python3\",\n                                \"/opt/xgboost/train.py\"\
           ,\n                                \"--lr=${trialParameters.learningRate}\"\
           ,\n                                \"--ne=${trialParameters.nEstimators}\"\
           ,\n                                \"--rs=${trialParameters.randomState}\"\
