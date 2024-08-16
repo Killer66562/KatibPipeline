@@ -79,7 +79,7 @@ def create_katib_experiment_task(
     x_test_path: str,
     y_train_path: str, 
     y_test_path: str
-):
+) -> bool:
     from kubeflow.katib import KatibClient
     from kubernetes.client import V1ObjectMeta
     from kubeflow.katib import V1beta1Experiment
@@ -195,6 +195,16 @@ def create_katib_experiment_task(
                 name="nEstimators",
                 description="N estimators for the training model",
                 reference="ne"
+            ), 
+            V1beta1TrialParameterSpec(
+                name="randomState",
+                description="Random state for the training model",
+                reference="rs"
+            ), 
+            V1beta1TrialParameterSpec(
+                name="booster",
+                description="Booster for the training model",
+                reference="booster"
             )
         ],
         trial_spec=trial_spec,
@@ -216,8 +226,13 @@ def create_katib_experiment_task(
         )
     )
 
-    client = KatibClient(namespace=client_namespace)
-    client.create_experiment(experiment=experiment)
+    try:
+        client = KatibClient(namespace=client_namespace)
+        client.create_experiment(experiment=experiment)
+        client.wait_for_experiment_condition(name=experiment_name, namespace=experiment_namespace)
+        return True
+    except Exception:
+        return False
     
 
 @dsl.pipeline
@@ -232,20 +247,20 @@ def katib_pipeline(
     n_estimators_max: int = 2000,
     learning_rate_min: float = 0.01, 
     learning_rate_max: float = 0.2, 
-    random_state_min: int = 0, 
+    random_state_min: int = 1, 
     random_state_max: int = 100, 
     x_train_path: str = "datasets/x_train.csv", 
     x_test_path: str = "datasets/x_test.csv", 
     y_train_path: str = "datasets/y_train.csv", 
     y_test_path: str = "datasets/y_test.csv"
-):
+) -> bool:
     '''
     load_data_task = load_data()
 
     prepare_data_task = prepare_data(data_input=load_data_task.outputs['data_output'])
     '''
     
-    create_katib_experiment_task(
+    katib_experiment_task = create_katib_experiment_task(
         experiment_name=experiment_name, 
         experiment_namespace=experiment_namespace,
         client_namespace=client_namespace,
@@ -263,5 +278,6 @@ def katib_pipeline(
         y_train_path=y_train_path, 
         y_test_path=y_test_path
     )
+    return katib_experiment_task.output
 
 compiler.Compiler().compile(katib_pipeline, 'katib_pipeline_test.yaml')
