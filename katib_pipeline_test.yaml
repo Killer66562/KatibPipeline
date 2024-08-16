@@ -19,8 +19,6 @@
 #    x_train_path: str [Default: 'datasets/x_train.csv']
 #    y_test_path: str [Default: 'datasets/y_test.csv']
 #    y_train_path: str [Default: 'datasets/y_train.csv']
-# Outputs:
-#    Output: bool
 components:
   comp-create-katib-experiment-task:
     executorLabel: exec-create-katib-experiment-task
@@ -58,10 +56,6 @@ components:
           parameterType: STRING
         y_train_path:
           parameterType: STRING
-    outputDefinitions:
-      parameters:
-        Output:
-          parameterType: BOOLEAN
 deploymentSpec:
   executors:
     exec-create-katib-experiment-task:
@@ -97,9 +91,9 @@ deploymentSpec:
           \ int,\n    n_estimators_min: int,\n    n_estimators_max: int,\n    learning_rate_min:\
           \ float, \n    learning_rate_max: float, \n    random_state_min: int, \n\
           \    random_state_max: int, \n    x_train_path: str, \n    x_test_path:\
-          \ str,\n    y_train_path: str, \n    y_test_path: str\n) -> bool:\n    from\
-          \ kubeflow.katib import KatibClient\n    from kubernetes.client import V1ObjectMeta\n\
-          \    from kubeflow.katib import V1beta1Experiment\n    from kubeflow.katib\
+          \ str,\n    y_train_path: str, \n    y_test_path: str\n):\n    from kubeflow.katib\
+          \ import KatibClient\n    from kubernetes.client import V1ObjectMeta\n \
+          \   from kubeflow.katib import V1beta1Experiment\n    from kubeflow.katib\
           \ import V1beta1AlgorithmSpec\n    from kubeflow.katib import V1beta1ObjectiveSpec\n\
           \    from kubeflow.katib import V1beta1FeasibleSpace\n    from kubeflow.katib\
           \ import V1beta1ExperimentSpec\n    from kubeflow.katib import V1beta1ObjectiveSpec\n\
@@ -166,10 +160,9 @@ deploymentSpec:
           \            max_failed_trial_count=max_failed_trial_counts,\n         \
           \   algorithm=algorithm_spec,\n            objective=objective_spec,\n \
           \           parameters=parameters,\n            trial_template=trial_template,\n\
-          \        )\n    )\n\n    try:\n        client = KatibClient(namespace=client_namespace)\n\
-          \        client.create_experiment(experiment=experiment)\n        client.wait_for_experiment_condition(name=experiment_name,\
-          \ namespace=experiment_namespace)\n        return True\n    except Exception:\n\
-          \        return False\n\n"
+          \        )\n    )\n\n    client = KatibClient(namespace=client_namespace)\n\
+          \    client.create_experiment(experiment=experiment)\n    client.wait_for_experiment_condition(name=experiment_name,\
+          \ namespace=experiment_namespace)\n\n"
         image: python:3.10-slim
 pipelineInfo:
   description: 'load_data_task = load_data()
@@ -178,12 +171,6 @@ pipelineInfo:
   name: katib-pipeline
 root:
   dag:
-    outputs:
-      parameters:
-        Output:
-          valueFromParameter:
-            outputParameterKey: Output
-            producerSubtask: create-katib-experiment-task
     tasks:
       create-katib-experiment-task:
         cachingOptions:
@@ -290,9 +277,5 @@ root:
         defaultValue: datasets/y_train.csv
         isOptional: true
         parameterType: STRING
-  outputDefinitions:
-    parameters:
-      Output:
-        parameterType: BOOLEAN
 schemaVersion: 2.1.0
 sdkVersion: kfp-2.2.0

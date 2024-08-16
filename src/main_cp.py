@@ -79,7 +79,7 @@ def create_katib_experiment_task(
     x_test_path: str,
     y_train_path: str, 
     y_test_path: str
-) -> bool:
+):
     from kubeflow.katib import KatibClient
     from kubernetes.client import V1ObjectMeta
     from kubeflow.katib import V1beta1Experiment
@@ -226,13 +226,9 @@ def create_katib_experiment_task(
         )
     )
 
-    try:
-        client = KatibClient(namespace=client_namespace)
-        client.create_experiment(experiment=experiment)
-        client.wait_for_experiment_condition(name=experiment_name, namespace=experiment_namespace)
-        return True
-    except Exception:
-        return False
+    client = KatibClient(namespace=client_namespace)
+    client.create_experiment(experiment=experiment)
+    client.wait_for_experiment_condition(name=experiment_name, namespace=experiment_namespace)
     
 
 @dsl.pipeline
@@ -253,7 +249,7 @@ def katib_pipeline(
     x_test_path: str = "datasets/x_test.csv", 
     y_train_path: str = "datasets/y_train.csv", 
     y_test_path: str = "datasets/y_test.csv"
-) -> bool:
+):
     '''
     load_data_task = load_data()
 
@@ -278,6 +274,5 @@ def katib_pipeline(
         y_train_path=y_train_path, 
         y_test_path=y_test_path
     )
-    return katib_experiment_task.output
 
 compiler.Compiler().compile(katib_pipeline, 'katib_pipeline_test.yaml')
