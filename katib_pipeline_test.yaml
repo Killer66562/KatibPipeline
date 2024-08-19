@@ -5,16 +5,22 @@
 # Inputs:
 #    booster: str [Default: 'gbtree']
 #    client_namespace: str [Default: 'kubeflow-user-example-com']
+#    datasets_from_pvc: bool [Default: False]
+#    datasets_pvc_mount_path: str [Default: 'datasets']
+#    datasets_pvc_name: str [Default: 'datasets-pvc']
 #    experiment_name: str
 #    experiment_namespace: str [Default: 'kubeflow-user-example-com']
 #    learning_rate_max: float [Default: 0.2]
 #    learning_rate_min: float [Default: 0.01]
 #    max_failed_trial_counts: int [Default: 5.0]
 #    max_trial_counts: int [Default: 10.0]
-#    n_estimators: int [Default: 3000.0]
+#    models_pvc_mount_path: str [Default: 'models']
+#    models_pvc_name: str [Default: 'models-pvc']
+#    n_estimators: int [Default: 2000.0]
 #    parallel_trial_counts: int [Default: 2.0]
 #    random_state_max: int [Default: 100.0]
 #    random_state_min: int [Default: 1.0]
+#    save_model: bool [Default: False]
 #    x_test_path: str [Default: 'datasets/x_test.csv']
 #    x_train_path: str [Default: 'datasets/x_train.csv']
 #    y_test_path: str [Default: 'datasets/y_test.csv']
@@ -28,6 +34,12 @@ components:
           parameterType: STRING
         client_namespace:
           parameterType: STRING
+        datasets_from_pvc:
+          parameterType: BOOLEAN
+        datasets_pvc_mount_path:
+          parameterType: STRING
+        datasets_pvc_name:
+          parameterType: STRING
         experiment_name:
           parameterType: STRING
         experiment_namespace:
@@ -40,6 +52,10 @@ components:
           parameterType: NUMBER_INTEGER
         max_trial_counts:
           parameterType: NUMBER_INTEGER
+        models_pvc_mount_path:
+          parameterType: STRING
+        models_pvc_name:
+          parameterType: STRING
         n_estimators:
           parameterType: NUMBER_INTEGER
         parallel_trial_counts:
@@ -48,6 +64,8 @@ components:
           parameterType: NUMBER_INTEGER
         random_state_min:
           parameterType: NUMBER_INTEGER
+        save_model:
+          parameterType: BOOLEAN
         x_test_path:
           parameterType: STRING
         x_train_path:
@@ -91,50 +109,56 @@ deploymentSpec:
           \ int,\n    n_estimators: int,\n    booster: str, \n    learning_rate_min:\
           \ float, \n    learning_rate_max: float, \n    random_state_min: int, \n\
           \    random_state_max: int, \n    x_train_path: str, \n    x_test_path:\
-          \ str,\n    y_train_path: str, \n    y_test_path: str\n):\n    from kubeflow.katib\
-          \ import KatibClient\n    from kubernetes.client import V1ObjectMeta\n \
-          \   from kubeflow.katib import V1beta1Experiment\n    from kubeflow.katib\
-          \ import V1beta1AlgorithmSpec\n    from kubeflow.katib import V1beta1ObjectiveSpec\n\
-          \    from kubeflow.katib import V1beta1FeasibleSpace\n    from kubeflow.katib\
-          \ import V1beta1ExperimentSpec\n    from kubeflow.katib import V1beta1ObjectiveSpec\n\
-          \    from kubeflow.katib import V1beta1ParameterSpec\n    from kubeflow.katib\
-          \ import V1beta1TrialTemplate\n    from kubeflow.katib import V1beta1TrialParameterSpec\n\
-          \n    metadata = V1ObjectMeta(\n        name=experiment_name, \n       \
-          \ namespace=experiment_namespace\n    )\n\n    algorithm_spec = V1beta1AlgorithmSpec(\n\
-          \        algorithm_name=\"random\"\n    )\n\n    objective_spec = V1beta1ObjectiveSpec(\n\
-          \        type=\"maximize\",\n        goal= 0.99,\n        objective_metric_name=\"\
-          accuracy\",\n    )\n\n    parameters = [\n        V1beta1ParameterSpec(\n\
-          \            name=\"lr\",\n            parameter_type=\"double\",\n    \
-          \        feasible_space=V1beta1FeasibleSpace(\n                min=str(learning_rate_min),\n\
-          \                max=str(learning_rate_max)\n            ),\n        ),\n\
-          \        V1beta1ParameterSpec(\n            name=\"rs\",\n            parameter_type=\"\
-          int\",\n            feasible_space=V1beta1FeasibleSpace(\n             \
-          \   min=str(random_state_min),\n                max=str(random_state_max)\n\
-          \            ),\n        )\n    ]\n\n    trial_spec={\n        \"apiVersion\"\
-          : \"batch/v1\",\n        \"kind\": \"Job\",\n        \"spec\": {\n     \
-          \       \"template\": {\n                \"metadata\": {\n             \
-          \       \"annotations\": {\n                        \"sidecar.istio.io/inject\"\
-          : \"false\"\n                    }\n                },\n               \
-          \ \"spec\": {\n                    \"containers\": [\n                 \
-          \       {\n                            \"name\": \"training-container\"\
-          ,\n                            \"image\": \"docker.io/killer66562/xgboost-trainer\"\
-          ,\n                            \"command\": [\n                        \
-          \        \"python3\",\n                                \"/opt/xgboost/train.py\"\
-          ,\n                                \"--lr=${trialParameters.learningRate}\"\
-          ,\n                                f\"--ne={n_estimators}\",\n         \
-          \                       \"--rs=${trialParameters.randomState}\",\n     \
-          \                           f\"--booster={booster}\",\n                \
-          \                f\"--x_train_path={x_train_path}\",\n                 \
-          \               f\"--x_test_path={x_test_path}\",\n                    \
-          \            f\"--y_train_path={y_train_path}\",\n                     \
-          \           f\"--y_test_path={y_test_path}\"\n                         \
-          \   ]\n\n                            #\"volumeMounts\": [\n            \
-          \                #    {\n                            #        \"name\":\
-          \ \"datasets\", \n                            #        \"mountPath\": \"\
-          /mnt/datasets\", \n                            #    }\n                \
-          \            #]\n                        }\n                    ],\n   \
-          \                 \"restartPolicy\": \"Never\"\n                }\n    \
-          \        }\n        }\n    }\n\n    trial_template=V1beta1TrialTemplate(\n\
+          \ str,\n    y_train_path: str, \n    y_test_path: str, \n    datasets_from_pvc:\
+          \ bool,\n    datasets_pvc_name: str, \n    datasets_pvc_mount_path: str,\
+          \ \n    models_pvc_name: str, \n    models_pvc_mount_path: str, \n    save_model:\
+          \ bool\n):\n    from kubeflow.katib import KatibClient\n    from kubernetes.client\
+          \ import V1ObjectMeta\n    from kubeflow.katib import V1beta1Experiment\n\
+          \    from kubeflow.katib import V1beta1AlgorithmSpec\n    from kubeflow.katib\
+          \ import V1beta1ObjectiveSpec\n    from kubeflow.katib import V1beta1FeasibleSpace\n\
+          \    from kubeflow.katib import V1beta1ExperimentSpec\n    from kubeflow.katib\
+          \ import V1beta1ObjectiveSpec\n    from kubeflow.katib import V1beta1ParameterSpec\n\
+          \    from kubeflow.katib import V1beta1TrialTemplate\n    from kubeflow.katib\
+          \ import V1beta1TrialParameterSpec\n\n    metadata = V1ObjectMeta(\n   \
+          \     name=experiment_name, \n        namespace=experiment_namespace\n \
+          \   )\n\n    algorithm_spec = V1beta1AlgorithmSpec(\n        algorithm_name=\"\
+          random\"\n    )\n\n    objective_spec = V1beta1ObjectiveSpec(\n        type=\"\
+          maximize\",\n        goal= 0.99,\n        objective_metric_name=\"accuracy\"\
+          ,\n    )\n\n    parameters = [\n        V1beta1ParameterSpec(\n        \
+          \    name=\"lr\",\n            parameter_type=\"double\",\n            feasible_space=V1beta1FeasibleSpace(\n\
+          \                min=str(learning_rate_min),\n                max=str(learning_rate_max)\n\
+          \            ),\n        ),\n        V1beta1ParameterSpec(\n           \
+          \ name=\"rs\",\n            parameter_type=\"int\",\n            feasible_space=V1beta1FeasibleSpace(\n\
+          \                min=str(random_state_min),\n                max=str(random_state_max)\n\
+          \            ),\n        )\n    ]\n\n    train_container = {\n        \"\
+          name\": \"training-container\",\n        \"image\": \"docker.io/killer66562/xgboost-trainer\"\
+          ,\n        \"command\": [\n            \"python3\",\n            \"/opt/xgboost/train.py\"\
+          ,\n            \"--lr=${trialParameters.learningRate}\",\n            f\"\
+          --ne={n_estimators}\",\n            \"--rs=${trialParameters.randomState}\"\
+          ,\n            f\"--booster={booster}\",\n            f\"--x_train_path={x_train_path}\"\
+          ,\n            f\"--x_test_path={x_test_path}\",\n            f\"--y_train_path={y_train_path}\"\
+          ,\n            f\"--y_test_path={y_test_path}\"\n            f\"--save_model={save_model}\"\
+          \n            f\"--model_folder_path={models_pvc_mount_path}\"\n       \
+          \ ]\n    }\n    template_spec = {\n        \"containers\": [\n         \
+          \   train_container\n        ],\n        \"restartPolicy\": \"Never\"\n\
+          \    }\n\n    volumes = []\n    volumeMounts = []\n\n    if datasets_from_pvc\
+          \ is True:\n        volumes.append({\n            \"name\": \"datasets\"\
+          , \n            \"persistentVolumeClaim\": {\n                \"claimName\"\
+          : datasets_pvc_name\n            }\n        })\n        volumeMounts.append({\n\
+          \            \"name\": \"datasets\", \n            \"mountPath\": datasets_pvc_mount_path\n\
+          \        })\n\n    if save_model is True:\n        volumes.append({\n  \
+          \          \"name\": \"models\", \n            \"persistentVolumeClaim\"\
+          : {\n                \"claimName\": models_pvc_name\n            }\n   \
+          \     })\n        volumeMounts.append({\n            \"name\": \"models\"\
+          , \n            \"mountPath\": models_pvc_mount_path\n        })\n\n   \
+          \ if datasets_from_pvc is True or save_model is True:\n        train_container[\"\
+          volumeMounts\"] = volumeMounts\n        template_spec[\"volumes\"] = volumes\n\
+          \n\n    trial_spec={\n        \"apiVersion\": \"batch/v1\",\n        \"\
+          kind\": \"Job\",\n        \"spec\": {\n            \"template\": {\n   \
+          \             \"metadata\": {\n                    \"annotations\": {\n\
+          \                        \"sidecar.istio.io/inject\": \"false\"\n      \
+          \              }\n                },\n                \"spec\": template_spec\n\
+          \            }\n        }\n    }\n\n    trial_template=V1beta1TrialTemplate(\n\
           \        primary_container_name=\"training-container\",\n        trial_parameters=[\n\
           \            V1beta1TrialParameterSpec(\n                name=\"learningRate\"\
           ,\n                description=\"Learning rate for the training model\"\
@@ -150,7 +174,7 @@ deploymentSpec:
           \           parameters=parameters,\n            trial_template=trial_template,\n\
           \        )\n    )\n\n    client = KatibClient(namespace=client_namespace)\n\
           \    client.create_experiment(experiment=experiment)\n    client.wait_for_experiment_condition(name=experiment_name,\
-          \ namespace=experiment_namespace)\n\n"
+          \ namespace=experiment_namespace, timeout=3600)\n\n"
         image: python:3.10-slim
 pipelineInfo:
   description: 'load_data_task = load_data()
@@ -171,6 +195,12 @@ root:
               componentInputParameter: booster
             client_namespace:
               componentInputParameter: client_namespace
+            datasets_from_pvc:
+              componentInputParameter: datasets_from_pvc
+            datasets_pvc_mount_path:
+              componentInputParameter: datasets_pvc_mount_path
+            datasets_pvc_name:
+              componentInputParameter: datasets_pvc_name
             experiment_name:
               componentInputParameter: experiment_name
             experiment_namespace:
@@ -183,6 +213,10 @@ root:
               componentInputParameter: max_failed_trial_counts
             max_trial_counts:
               componentInputParameter: max_trial_counts
+            models_pvc_mount_path:
+              componentInputParameter: models_pvc_mount_path
+            models_pvc_name:
+              componentInputParameter: models_pvc_name
             n_estimators:
               componentInputParameter: n_estimators
             parallel_trial_counts:
@@ -191,6 +225,8 @@ root:
               componentInputParameter: random_state_max
             random_state_min:
               componentInputParameter: random_state_min
+            save_model:
+              componentInputParameter: save_model
             x_test_path:
               componentInputParameter: x_test_path
             x_train_path:
@@ -209,6 +245,18 @@ root:
         parameterType: STRING
       client_namespace:
         defaultValue: kubeflow-user-example-com
+        isOptional: true
+        parameterType: STRING
+      datasets_from_pvc:
+        defaultValue: false
+        isOptional: true
+        parameterType: BOOLEAN
+      datasets_pvc_mount_path:
+        defaultValue: datasets
+        isOptional: true
+        parameterType: STRING
+      datasets_pvc_name:
+        defaultValue: datasets-pvc
         isOptional: true
         parameterType: STRING
       experiment_name:
@@ -233,8 +281,16 @@ root:
         defaultValue: 10.0
         isOptional: true
         parameterType: NUMBER_INTEGER
+      models_pvc_mount_path:
+        defaultValue: models
+        isOptional: true
+        parameterType: STRING
+      models_pvc_name:
+        defaultValue: models-pvc
+        isOptional: true
+        parameterType: STRING
       n_estimators:
-        defaultValue: 3000.0
+        defaultValue: 2000.0
         isOptional: true
         parameterType: NUMBER_INTEGER
       parallel_trial_counts:
@@ -249,6 +305,10 @@ root:
         defaultValue: 1.0
         isOptional: true
         parameterType: NUMBER_INTEGER
+      save_model:
+        defaultValue: false
+        isOptional: true
+        parameterType: BOOLEAN
       x_test_path:
         defaultValue: datasets/x_test.csv
         isOptional: true

@@ -78,7 +78,13 @@ def create_katib_experiment_task(
     x_train_path: str, 
     x_test_path: str,
     y_train_path: str, 
-    y_test_path: str
+    y_test_path: str, 
+    datasets_from_pvc: bool,
+    datasets_pvc_name: str, 
+    datasets_pvc_mount_path: str, 
+    models_pvc_name: str, 
+    models_pvc_mount_path: str, 
+    save_model: bool
 ):
     from kubeflow.katib import KatibClient
     from kubernetes.client import V1ObjectMeta
@@ -126,6 +132,63 @@ def create_katib_experiment_task(
         )
     ]
 
+    train_container = {
+        "name": "training-container",
+        "image": "docker.io/killer66562/xgboost-trainer",
+        "command": [
+            "python3",
+            "/opt/xgboost/train.py",
+            "--lr=${trialParameters.learningRate}",
+            f"--ne={n_estimators}",
+            "--rs=${trialParameters.randomState}",
+            f"--booster={booster}",
+            f"--x_train_path={x_train_path}",
+            f"--x_test_path={x_test_path}",
+            f"--y_train_path={y_train_path}",
+            f"--y_test_path={y_test_path}"
+            f"--save_model={save_model}"
+            f"--model_folder_path={models_pvc_mount_path}"
+        ]
+    }
+    template_spec = {
+        "containers": [
+            train_container
+        ],
+        "restartPolicy": "Never"
+    }
+
+    volumes = []
+    volumeMounts = []
+    
+    if datasets_from_pvc is True:
+        volumes.append({
+            "name": "datasets", 
+            "persistentVolumeClaim": {
+                "claimName": datasets_pvc_name
+            }
+        })
+        volumeMounts.append({
+            "name": "datasets", 
+            "mountPath": datasets_pvc_mount_path
+        })
+
+    if save_model is True:
+        volumes.append({
+            "name": "models", 
+            "persistentVolumeClaim": {
+                "claimName": models_pvc_name
+            }
+        })
+        volumeMounts.append({
+            "name": "models", 
+            "mountPath": models_pvc_mount_path
+        })
+
+    if datasets_from_pvc is True or save_model is True:
+        train_container["volumeMounts"] = volumeMounts
+        template_spec["volumes"] = volumes
+
+
     trial_spec={
         "apiVersion": "batch/v1",
         "kind": "Job",
@@ -136,51 +199,7 @@ def create_katib_experiment_task(
                         "sidecar.istio.io/inject": "false"
                     }
                 },
-                "spec": {
-                    "containers": [
-                        {
-                            "name": "training-container",
-                            "image": "docker.io/killer66562/xgboost-trainer",
-                            "command": [
-                                "python3",
-                                "/opt/xgboost/train.py",
-                                "--lr=${trialParameters.learningRate}",
-                                f"--ne={n_estimators}",
-                                "--rs=${trialParameters.randomState}",
-                                f"--booster={booster}",
-                                f"--x_train_path={x_train_path}",
-                                f"--x_test_path={x_test_path}",
-                                f"--y_train_path={y_train_path}",
-                                f"--y_test_path={y_test_path}"
-                            ],
-                            "volumeMounts": [
-                                {
-                                    "name": "datasets", 
-                                    "mountPath": "/opt/xgboost/datasets", 
-                                }, 
-                                {
-                                    "name": "models", 
-                                    "mountPath": "/opt/xgboost/models", 
-                                }
-                            ]
-                        }
-                    ],
-                    "volumes": [
-                        {
-                            "name": "datasets", 
-                            "persistentVolumeClaim": {
-                                "claimName": "datasets-pvc-home"
-                            }
-                        },
-                        {
-                            "name": "models", 
-                            "persistentVolumeClaim": {
-                                "claimName": "models-pvc-home"
-                            }
-                        }
-                    ], 
-                    "restartPolicy": "Never"
-                }
+                "spec": template_spec
             }
         }
     }
@@ -240,7 +259,13 @@ def katib_pipeline(
     x_train_path: str = "datasets/x_train.csv", 
     x_test_path: str = "datasets/x_test.csv", 
     y_train_path: str = "datasets/y_train.csv", 
-    y_test_path: str = "datasets/y_test.csv"
+    y_test_path: str = "datasets/y_test.csv", 
+    datasets_from_pvc: bool = False, 
+    datasets_pvc_name: str = "datasets-pvc", 
+    datasets_pvc_mount_path: str = "datasets", 
+    models_pvc_name: str = "models-pvc", 
+    models_pvc_mount_path: str = "models", 
+    save_model: bool = False
 ):
     '''
     load_data_task = load_data()
@@ -264,7 +289,13 @@ def katib_pipeline(
         x_train_path=x_train_path, 
         x_test_path=x_test_path, 
         y_train_path=y_train_path, 
-        y_test_path=y_test_path
+        y_test_path=y_test_path,
+        datasets_from_pvc=datasets_from_pvc, 
+        datasets_pvc_name=datasets_pvc_name, 
+        datasets_pvc_mount_path=datasets_pvc_mount_path, 
+        models_pvc_name=models_pvc_name, 
+        models_pvc_mount_path=models_pvc_mount_path, 
+        save_model=save_model
     )
 
 compiler.Compiler().compile(katib_pipeline, 'katib_pipeline_test.yaml')
