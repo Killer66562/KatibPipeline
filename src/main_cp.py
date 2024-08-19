@@ -145,8 +145,8 @@ def create_katib_experiment_task(
             f"--x_train_path={x_train_path}",
             f"--x_test_path={x_test_path}",
             f"--y_train_path={y_train_path}",
-            f"--y_test_path={y_test_path}"
-            f"--save_model={save_model}"
+            f"--y_test_path={y_test_path}",
+            f"--save_model={save_model}",
             f"--model_folder_path={models_pvc_mount_path}"
         ]
     }

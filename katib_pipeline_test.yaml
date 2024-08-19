@@ -5,7 +5,7 @@
 # Inputs:
 #    booster: str [Default: 'gbtree']
 #    client_namespace: str [Default: 'kubeflow-user-example-com']
-#    datasets_from_pvc: bool [Default: false]
+#    datasets_from_pvc: bool [Default: False]
 #    datasets_pvc_mount_path: str [Default: 'datasets']
 #    datasets_pvc_name: str [Default: 'datasets-pvc']
 #    experiment_name: str
@@ -20,7 +20,7 @@
 #    parallel_trial_counts: int [Default: 2.0]
 #    random_state_max: int [Default: 100.0]
 #    random_state_min: int [Default: 1.0]
-#    save_model: bool [Default: false]
+#    save_model: bool [Default: False]
 #    x_test_path: str [Default: 'datasets/x_test.csv']
 #    x_train_path: str [Default: 'datasets/x_train.csv']
 #    y_test_path: str [Default: 'datasets/y_test.csv']
@@ -137,10 +137,10 @@ deploymentSpec:
           --ne={n_estimators}\",\n            \"--rs=${trialParameters.randomState}\"\
           ,\n            f\"--booster={booster}\",\n            f\"--x_train_path={x_train_path}\"\
           ,\n            f\"--x_test_path={x_test_path}\",\n            f\"--y_train_path={y_train_path}\"\
-          ,\n            f\"--y_test_path={y_test_path}\"\n            f\"--save_model={save_model}\"\
-          \n            f\"--model_folder_path={models_pvc_mount_path}\"\n       \
-          \ ]\n    }\n    template_spec = {\n        \"containers\": [\n         \
-          \   train_container\n        ],\n        \"restartPolicy\": \"Never\"\n\
+          ,\n            f\"--y_test_path={y_test_path}\",\n            f\"--save_model={save_model}\"\
+          ,\n            f\"--model_folder_path={models_pvc_mount_path}\"\n      \
+          \  ]\n    }\n    template_spec = {\n        \"containers\": [\n        \
+          \    train_container\n        ],\n        \"restartPolicy\": \"Never\"\n\
           \    }\n\n    volumes = []\n    volumeMounts = []\n\n    if datasets_from_pvc\
           \ is True:\n        volumes.append({\n            \"name\": \"datasets\"\
           , \n            \"persistentVolumeClaim\": {\n                \"claimName\"\
