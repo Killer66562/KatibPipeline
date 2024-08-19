@@ -180,7 +180,7 @@ def create_katib_experiment_task(
         })
         volumeMounts.append({
             "name": "models", 
-            "mountPath": "models"
+            "mountPath": "/opt/xgboost/models"
         })
 
     if datasets_from_pvc is True or save_model is True:
@@ -255,13 +255,13 @@ def katib_pipeline(
     learning_rate_max: float = 0.2, 
     random_state_min: int = 1, 
     random_state_max: int = 100, 
-    x_train_path: str = "datasets/x_train.csv", 
-    x_test_path: str = "datasets/x_test.csv", 
-    y_train_path: str = "datasets/y_train.csv", 
-    y_test_path: str = "datasets/y_test.csv", 
+    x_train_path: str = "/opt/xgboost/datasets/x_train.csv", 
+    x_test_path: str = "/opt/xgboost/datasets/x_test.csv", 
+    y_train_path: str = "/opt/xgboost/datasets/y_train.csv", 
+    y_test_path: str = "/opt/xgboost/datasets/y_test.csv", 
     datasets_from_pvc: bool = False, 
     datasets_pvc_name: str = "datasets-pvc", 
-    datasets_pvc_mount_path: str = "datasets", 
+    datasets_pvc_mount_path: str = "/opt/xgboost/datasets", 
     models_pvc_name: str = "models-pvc", 
     save_model: bool = False
 ):

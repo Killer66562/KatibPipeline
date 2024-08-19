@@ -6,7 +6,7 @@
 #    booster: str [Default: 'gbtree']
 #    client_namespace: str [Default: 'kubeflow-user-example-com']
 #    datasets_from_pvc: bool [Default: False]
-#    datasets_pvc_mount_path: str [Default: 'datasets']
+#    datasets_pvc_mount_path: str [Default: '/opt/xgboost/datasets']
 #    datasets_pvc_name: str [Default: 'datasets-pvc']
 #    experiment_name: str
 #    experiment_namespace: str [Default: 'kubeflow-user-example-com']
@@ -20,10 +20,10 @@
 #    random_state_max: int [Default: 100.0]
 #    random_state_min: int [Default: 1.0]
 #    save_model: bool [Default: False]
-#    x_test_path: str [Default: 'datasets/x_test.csv']
-#    x_train_path: str [Default: 'datasets/x_train.csv']
-#    y_test_path: str [Default: 'datasets/y_test.csv']
-#    y_train_path: str [Default: 'datasets/y_train.csv']
+#    x_test_path: str [Default: '/opt/xgboost/datasets/x_test.csv']
+#    x_train_path: str [Default: '/opt/xgboost/datasets/x_train.csv']
+#    y_test_path: str [Default: '/opt/xgboost/datasets/y_test.csv']
+#    y_train_path: str [Default: '/opt/xgboost/datasets/y_train.csv']
 components:
   comp-create-katib-experiment-task:
     executorLabel: exec-create-katib-experiment-task
@@ -146,7 +146,7 @@ deploymentSpec:
           \   if save_model is True:\n        volumes.append({\n            \"name\"\
           : \"models\", \n            \"persistentVolumeClaim\": {\n             \
           \   \"claimName\": models_pvc_name\n            }\n        })\n        volumeMounts.append({\n\
-          \            \"name\": \"models\", \n            \"mountPath\": \"models\"\
+          \            \"name\": \"models\", \n            \"mountPath\": \"/opt/xgboost/models\"\
           \n        })\n\n    if datasets_from_pvc is True or save_model is True:\n\
           \        train_container[\"volumeMounts\"] = volumeMounts\n        template_spec[\"\
           volumes\"] = volumes\n\n\n    trial_spec={\n        \"apiVersion\": \"batch/v1\"\
@@ -246,7 +246,7 @@ root:
         isOptional: true
         parameterType: BOOLEAN
       datasets_pvc_mount_path:
-        defaultValue: datasets
+        defaultValue: /opt/xgboost/datasets
         isOptional: true
         parameterType: STRING
       datasets_pvc_name:
@@ -300,19 +300,19 @@ root:
         isOptional: true
         parameterType: BOOLEAN
       x_test_path:
-        defaultValue: datasets/x_test.csv
+        defaultValue: /opt/xgboost/datasets/x_test.csv
         isOptional: true
         parameterType: STRING
       x_train_path:
-        defaultValue: datasets/x_train.csv
+        defaultValue: /opt/xgboost/datasets/x_train.csv
         isOptional: true
         parameterType: STRING
       y_test_path:
-        defaultValue: datasets/y_test.csv
+        defaultValue: /opt/xgboost/datasets/y_test.csv
         isOptional: true
         parameterType: STRING
       y_train_path:
-        defaultValue: datasets/y_train.csv
+        defaultValue: /opt/xgboost/datasets/y_train.csv
         isOptional: true
         parameterType: STRING
 schemaVersion: 2.1.0
