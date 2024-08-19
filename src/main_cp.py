@@ -83,7 +83,6 @@ def create_katib_experiment_task(
     datasets_pvc_name: str, 
     datasets_pvc_mount_path: str, 
     models_pvc_name: str, 
-    models_pvc_mount_path: str, 
     save_model: bool
 ):
     from kubeflow.katib import KatibClient
@@ -147,7 +146,7 @@ def create_katib_experiment_task(
             f"--y_train_path={y_train_path}",
             f"--y_test_path={y_test_path}",
             f"--save_model={save_model}",
-            f"--model_folder_path={models_pvc_mount_path}"
+            f"--model_folder_path=models"
         ]
     }
     template_spec = {
@@ -181,7 +180,7 @@ def create_katib_experiment_task(
         })
         volumeMounts.append({
             "name": "models", 
-            "mountPath": models_pvc_mount_path
+            "mountPath": "models"
         })
 
     if datasets_from_pvc is True or save_model is True:
@@ -264,7 +263,6 @@ def katib_pipeline(
     datasets_pvc_name: str = "datasets-pvc", 
     datasets_pvc_mount_path: str = "datasets", 
     models_pvc_name: str = "models-pvc", 
-    models_pvc_mount_path: str = "models", 
     save_model: bool = False
 ):
     '''
@@ -294,7 +292,6 @@ def katib_pipeline(
         datasets_pvc_name=datasets_pvc_name, 
         datasets_pvc_mount_path=datasets_pvc_mount_path, 
         models_pvc_name=models_pvc_name, 
-        models_pvc_mount_path=models_pvc_mount_path, 
         save_model=save_model
     )
 

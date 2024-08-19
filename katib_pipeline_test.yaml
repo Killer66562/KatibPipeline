@@ -14,7 +14,6 @@
 #    learning_rate_min: float [Default: 0.01]
 #    max_failed_trial_counts: int [Default: 5.0]
 #    max_trial_counts: int [Default: 10.0]
-#    models_pvc_mount_path: str [Default: 'models']
 #    models_pvc_name: str [Default: 'models-pvc']
 #    n_estimators: int [Default: 2000.0]
 #    parallel_trial_counts: int [Default: 2.0]
@@ -52,8 +51,6 @@ components:
           parameterType: NUMBER_INTEGER
         max_trial_counts:
           parameterType: NUMBER_INTEGER
-        models_pvc_mount_path:
-          parameterType: STRING
         models_pvc_name:
           parameterType: STRING
         n_estimators:
@@ -111,25 +108,25 @@ deploymentSpec:
           \    random_state_max: int, \n    x_train_path: str, \n    x_test_path:\
           \ str,\n    y_train_path: str, \n    y_test_path: str, \n    datasets_from_pvc:\
           \ bool,\n    datasets_pvc_name: str, \n    datasets_pvc_mount_path: str,\
-          \ \n    models_pvc_name: str, \n    models_pvc_mount_path: str, \n    save_model:\
-          \ bool\n):\n    from kubeflow.katib import KatibClient\n    from kubernetes.client\
-          \ import V1ObjectMeta\n    from kubeflow.katib import V1beta1Experiment\n\
-          \    from kubeflow.katib import V1beta1AlgorithmSpec\n    from kubeflow.katib\
-          \ import V1beta1ObjectiveSpec\n    from kubeflow.katib import V1beta1FeasibleSpace\n\
-          \    from kubeflow.katib import V1beta1ExperimentSpec\n    from kubeflow.katib\
-          \ import V1beta1ObjectiveSpec\n    from kubeflow.katib import V1beta1ParameterSpec\n\
-          \    from kubeflow.katib import V1beta1TrialTemplate\n    from kubeflow.katib\
-          \ import V1beta1TrialParameterSpec\n\n    metadata = V1ObjectMeta(\n   \
-          \     name=experiment_name, \n        namespace=experiment_namespace\n \
-          \   )\n\n    algorithm_spec = V1beta1AlgorithmSpec(\n        algorithm_name=\"\
-          random\"\n    )\n\n    objective_spec = V1beta1ObjectiveSpec(\n        type=\"\
-          maximize\",\n        goal= 0.99,\n        objective_metric_name=\"accuracy\"\
-          ,\n    )\n\n    parameters = [\n        V1beta1ParameterSpec(\n        \
-          \    name=\"lr\",\n            parameter_type=\"double\",\n            feasible_space=V1beta1FeasibleSpace(\n\
-          \                min=str(learning_rate_min),\n                max=str(learning_rate_max)\n\
-          \            ),\n        ),\n        V1beta1ParameterSpec(\n           \
-          \ name=\"rs\",\n            parameter_type=\"int\",\n            feasible_space=V1beta1FeasibleSpace(\n\
-          \                min=str(random_state_min),\n                max=str(random_state_max)\n\
+          \ \n    models_pvc_name: str, \n    save_model: bool\n):\n    from kubeflow.katib\
+          \ import KatibClient\n    from kubernetes.client import V1ObjectMeta\n \
+          \   from kubeflow.katib import V1beta1Experiment\n    from kubeflow.katib\
+          \ import V1beta1AlgorithmSpec\n    from kubeflow.katib import V1beta1ObjectiveSpec\n\
+          \    from kubeflow.katib import V1beta1FeasibleSpace\n    from kubeflow.katib\
+          \ import V1beta1ExperimentSpec\n    from kubeflow.katib import V1beta1ObjectiveSpec\n\
+          \    from kubeflow.katib import V1beta1ParameterSpec\n    from kubeflow.katib\
+          \ import V1beta1TrialTemplate\n    from kubeflow.katib import V1beta1TrialParameterSpec\n\
+          \n    metadata = V1ObjectMeta(\n        name=experiment_name, \n       \
+          \ namespace=experiment_namespace\n    )\n\n    algorithm_spec = V1beta1AlgorithmSpec(\n\
+          \        algorithm_name=\"random\"\n    )\n\n    objective_spec = V1beta1ObjectiveSpec(\n\
+          \        type=\"maximize\",\n        goal= 0.99,\n        objective_metric_name=\"\
+          accuracy\",\n    )\n\n    parameters = [\n        V1beta1ParameterSpec(\n\
+          \            name=\"lr\",\n            parameter_type=\"double\",\n    \
+          \        feasible_space=V1beta1FeasibleSpace(\n                min=str(learning_rate_min),\n\
+          \                max=str(learning_rate_max)\n            ),\n        ),\n\
+          \        V1beta1ParameterSpec(\n            name=\"rs\",\n            parameter_type=\"\
+          int\",\n            feasible_space=V1beta1FeasibleSpace(\n             \
+          \   min=str(random_state_min),\n                max=str(random_state_max)\n\
           \            ),\n        )\n    ]\n\n    train_container = {\n        \"\
           name\": \"training-container\",\n        \"image\": \"docker.io/killer66562/xgboost-trainer\"\
           ,\n        \"command\": [\n            \"python3\",\n            \"/opt/xgboost/train.py\"\
@@ -138,26 +135,25 @@ deploymentSpec:
           ,\n            f\"--booster={booster}\",\n            f\"--x_train_path={x_train_path}\"\
           ,\n            f\"--x_test_path={x_test_path}\",\n            f\"--y_train_path={y_train_path}\"\
           ,\n            f\"--y_test_path={y_test_path}\",\n            f\"--save_model={save_model}\"\
-          ,\n            f\"--model_folder_path={models_pvc_mount_path}\"\n      \
-          \  ]\n    }\n    template_spec = {\n        \"containers\": [\n        \
-          \    train_container\n        ],\n        \"restartPolicy\": \"Never\"\n\
-          \    }\n\n    volumes = []\n    volumeMounts = []\n\n    if datasets_from_pvc\
-          \ is True:\n        volumes.append({\n            \"name\": \"datasets\"\
-          , \n            \"persistentVolumeClaim\": {\n                \"claimName\"\
-          : datasets_pvc_name\n            }\n        })\n        volumeMounts.append({\n\
-          \            \"name\": \"datasets\", \n            \"mountPath\": datasets_pvc_mount_path\n\
-          \        })\n\n    if save_model is True:\n        volumes.append({\n  \
-          \          \"name\": \"models\", \n            \"persistentVolumeClaim\"\
-          : {\n                \"claimName\": models_pvc_name\n            }\n   \
-          \     })\n        volumeMounts.append({\n            \"name\": \"models\"\
-          , \n            \"mountPath\": models_pvc_mount_path\n        })\n\n   \
-          \ if datasets_from_pvc is True or save_model is True:\n        train_container[\"\
-          volumeMounts\"] = volumeMounts\n        template_spec[\"volumes\"] = volumes\n\
-          \n\n    trial_spec={\n        \"apiVersion\": \"batch/v1\",\n        \"\
-          kind\": \"Job\",\n        \"spec\": {\n            \"template\": {\n   \
-          \             \"metadata\": {\n                    \"annotations\": {\n\
-          \                        \"sidecar.istio.io/inject\": \"false\"\n      \
-          \              }\n                },\n                \"spec\": template_spec\n\
+          ,\n            f\"--model_folder_path=models\"\n        ]\n    }\n    template_spec\
+          \ = {\n        \"containers\": [\n            train_container\n        ],\n\
+          \        \"restartPolicy\": \"Never\"\n    }\n\n    volumes = []\n    volumeMounts\
+          \ = []\n\n    if datasets_from_pvc is True:\n        volumes.append({\n\
+          \            \"name\": \"datasets\", \n            \"persistentVolumeClaim\"\
+          : {\n                \"claimName\": datasets_pvc_name\n            }\n \
+          \       })\n        volumeMounts.append({\n            \"name\": \"datasets\"\
+          , \n            \"mountPath\": datasets_pvc_mount_path\n        })\n\n \
+          \   if save_model is True:\n        volumes.append({\n            \"name\"\
+          : \"models\", \n            \"persistentVolumeClaim\": {\n             \
+          \   \"claimName\": models_pvc_name\n            }\n        })\n        volumeMounts.append({\n\
+          \            \"name\": \"models\", \n            \"mountPath\": \"models\"\
+          \n        })\n\n    if datasets_from_pvc is True or save_model is True:\n\
+          \        train_container[\"volumeMounts\"] = volumeMounts\n        template_spec[\"\
+          volumes\"] = volumes\n\n\n    trial_spec={\n        \"apiVersion\": \"batch/v1\"\
+          ,\n        \"kind\": \"Job\",\n        \"spec\": {\n            \"template\"\
+          : {\n                \"metadata\": {\n                    \"annotations\"\
+          : {\n                        \"sidecar.istio.io/inject\": \"false\"\n  \
+          \                  }\n                },\n                \"spec\": template_spec\n\
           \            }\n        }\n    }\n\n    trial_template=V1beta1TrialTemplate(\n\
           \        primary_container_name=\"training-container\",\n        trial_parameters=[\n\
           \            V1beta1TrialParameterSpec(\n                name=\"learningRate\"\
@@ -213,8 +209,6 @@ root:
               componentInputParameter: max_failed_trial_counts
             max_trial_counts:
               componentInputParameter: max_trial_counts
-            models_pvc_mount_path:
-              componentInputParameter: models_pvc_mount_path
             models_pvc_name:
               componentInputParameter: models_pvc_name
             n_estimators:
@@ -281,10 +275,6 @@ root:
         defaultValue: 10.0
         isOptional: true
         parameterType: NUMBER_INTEGER
-      models_pvc_mount_path:
-        defaultValue: models
-        isOptional: true
-        parameterType: STRING
       models_pvc_name:
         defaultValue: models-pvc
         isOptional: true
