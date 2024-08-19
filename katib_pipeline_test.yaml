@@ -5,7 +5,7 @@
 # Inputs:
 #    booster: str [Default: 'gbtree']
 #    client_namespace: str [Default: 'kubeflow-user-example-com']
-#    datasets_from_pvc: bool [Default: False]
+#    datasets_from_pvc: bool [Default: false]
 #    datasets_pvc_mount_path: str [Default: 'datasets']
 #    datasets_pvc_name: str [Default: 'datasets-pvc']
 #    experiment_name: str
@@ -20,7 +20,7 @@
 #    parallel_trial_counts: int [Default: 2.0]
 #    random_state_max: int [Default: 100.0]
 #    random_state_min: int [Default: 1.0]
-#    save_model: bool [Default: False]
+#    save_model: bool [Default: false]
 #    x_test_path: str [Default: 'datasets/x_test.csv']
 #    x_train_path: str [Default: 'datasets/x_train.csv']
 #    y_test_path: str [Default: 'datasets/y_test.csv']
