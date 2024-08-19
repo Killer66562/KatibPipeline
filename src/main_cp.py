@@ -152,16 +152,33 @@ def create_katib_experiment_task(
                                 f"--x_test_path={x_test_path}",
                                 f"--y_train_path={y_train_path}",
                                 f"--y_test_path={y_test_path}"
+                            ],
+                            "volumeMounts": [
+                                {
+                                    "name": "datasets", 
+                                    "mountPath": "/opt/xgboost/datasets", 
+                                }, 
+                                {
+                                    "name": "models", 
+                                    "mountPath": "/opt/xgboost/models", 
+                                }
                             ]
-                            
-                            #"volumeMounts": [
-                            #    {
-                            #        "name": "datasets", 
-                            #        "mountPath": "/mnt/datasets", 
-                            #    }
-                            #]
                         }
                     ],
+                    "volumes": [
+                        {
+                            "name": "datasets", 
+                            "persistentVolumeClaim": {
+                                "claimName": "datasets-pvc-home"
+                            }
+                        },
+                        {
+                            "name": "models", 
+                            "persistentVolumeClaim": {
+                                "claimName": "models-pvc-home"
+                            }
+                        }
+                    ], 
                     "restartPolicy": "Never"
                 }
             }
@@ -203,7 +220,7 @@ def create_katib_experiment_task(
 
     client = KatibClient(namespace=client_namespace)
     client.create_experiment(experiment=experiment)
-    client.wait_for_experiment_condition(name=experiment_name, namespace=experiment_namespace)
+    client.wait_for_experiment_condition(name=experiment_name, namespace=experiment_namespace, timeout=3600)
     
 
 @dsl.pipeline
@@ -214,7 +231,7 @@ def katib_pipeline(
     max_trial_counts: int = 10, 
     max_failed_trial_counts: int = 5, 
     parallel_trial_counts: int = 2,
-    n_estimators: int = 3000,
+    n_estimators: int = 2000,
     booster: str = 'gbtree', 
     learning_rate_min: float = 0.01, 
     learning_rate_max: float = 0.2, 
