@@ -175,7 +175,7 @@ def create_katib_experiment_task(
     client.create_experiment(experiment=experiment)
     client.wait_for_experiment_condition(name=experiment_name, namespace=experiment_namespace, timeout=3600)
 
-    result = client.get_optimal_hyperparameters(name=experiment_name, namespace=experiment_namespace)
+    result = client.get_optimal_hyperparameters(name=experiment_name, namespace=experiment_namespace).to_dict()
 
     best_params_list = result["parameter_assignments"]
 

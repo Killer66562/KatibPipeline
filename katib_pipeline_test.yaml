@@ -175,9 +175,9 @@ deploymentSpec:
           \        )\n    )\n\n    client = KatibClient(namespace=client_namespace)\n\
           \    client.create_experiment(experiment=experiment)\n    client.wait_for_experiment_condition(name=experiment_name,\
           \ namespace=experiment_namespace, timeout=3600)\n\n    result = client.get_optimal_hyperparameters(name=experiment_name,\
-          \ namespace=experiment_namespace)\n\n    best_params_list = result[\"parameter_assignments\"\
-          ]\n\n    for params in best_params_list:\n        name = params[\"name\"\
-          ]\n        value = params[\"value\"]\n        best_params_metrics.log_metric(metric=name,\
+          \ namespace=experiment_namespace).to_dict()\n\n    best_params_list = result[\"\
+          parameter_assignments\"]\n\n    for params in best_params_list:\n      \
+          \  name = params[\"name\"]\n        value = params[\"value\"]\n        best_params_metrics.log_metric(metric=name,\
           \ value=value)\n\n"
         image: python:3.10-slim
 pipelineInfo:
