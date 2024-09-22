@@ -1,61 +1,6 @@
 from kfp import dsl, compiler
-from kfp.dsl import Input, Output, Dataset
 
 
-'''
-@dsl.component(
-    base_image='python:3.9',
-    packages_to_install=['pandas==2.2.2']
-)
-def load_data(data_output: Output[Dataset]):
-    import pandas as pd
-    
-    url = "https://raw.githubusercontent.com/daniel88516/diabetes-data/main/10k.csv"
-    df_data = pd.read_csv(url)
-    
-    df_data = df_data.drop(df_data[df_data['diabetes'] == 'No Info'].index)
-    df_data = df_data[['gender','age', 'bmi', 'HbA1c_level', 'blood_glucose_level', 'diabetes']]
-    df_data = df_data.dropna(thresh=4)
-    
-    gender_map = {'Male': 0 , 'Female': 1  , 'Other': 2}
-    df_data['gender'] = df_data['gender'].map(gender_map)
-    df_data = df_data[df_data['gender'] != 2]
-    df_data['age'] = df_data['age'].replace('No Info', df_data['age'].mean())
-    df_data['bmi'] = df_data['bmi'].replace('No Info', df_data['bmi'].mean())
-    df_data['HbA1c_level'] = df_data['HbA1c_level'].replace('No Info', df_data['HbA1c_level'].mean())
-    df_data['blood_glucose_level'] = df_data['blood_glucose_level'].replace('No Info', df_data['blood_glucose_level'].mean())
-
-    df_data.to_csv(data_output.path)
-
-@dsl.component(
-    base_image='python:3.9',
-    packages_to_install=['pandas==2.2.2', 'scikit-learn==1.5.1']
-)
-def prepare_data(
-    data_input: Input[Dataset], 
-    x_train_output: Output[Dataset], x_test_output: Output[Dataset],
-    y_train_output: Output[Dataset], y_test_output: Output[Dataset]
-):
-    import pandas as pd
-    from sklearn.model_selection import train_test_split
-
-    df_data = pd.read_csv(data_input.path)
-
-    x = df_data.drop(labels=['diabetes'], axis=1)
-    y = df_data[['diabetes']]
-    
-    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
-    
-    x_train_df = pd.DataFrame(x_train)
-    x_test_df = pd.DataFrame(x_test)
-    y_train_df = pd.DataFrame(y_train)
-    y_test_df = pd.DataFrame(y_test)
-
-    x_train_df.to_csv(x_train_output.path, index=False)
-    x_test_df.to_csv(x_test_output.path, index=False)
-    y_train_df.to_csv(y_train_output.path, index=False)
-    y_test_df.to_csv(y_test_output.path, index=False)
-'''
 @dsl.component(
     base_image='python:3.10-slim', 
     packages_to_install=[
@@ -73,8 +18,8 @@ def create_katib_experiment_task(
     booster: str, 
     learning_rate_min: float, 
     learning_rate_max: float, 
-    random_state_min: int, 
-    random_state_max: int, 
+    random_state: int, 
+    early_stopping_rounds: int, 
     x_train_path: str, 
     x_test_path: str,
     y_train_path: str, 
@@ -120,14 +65,6 @@ def create_katib_experiment_task(
                 min=str(learning_rate_min),
                 max=str(learning_rate_max)
             ),
-        ),
-        V1beta1ParameterSpec(
-            name="rs",
-            parameter_type="int",
-            feasible_space=V1beta1FeasibleSpace(
-                min=str(random_state_min),
-                max=str(random_state_max)
-            ),
         )
     ]
 
@@ -139,7 +76,8 @@ def create_katib_experiment_task(
             "/opt/xgboost/train.py",
             "--lr=${trialParameters.learningRate}",
             f"--ne={n_estimators}",
-            "--rs=${trialParameters.randomState}",
+            f"--rs={random_state}",
+            f"--esp=${early_stopping_rounds}",
             f"--booster={booster}",
             f"--x_train_path={x_train_path}",
             f"--x_test_path={x_test_path}",
@@ -210,11 +148,6 @@ def create_katib_experiment_task(
                 name="learningRate",
                 description="Learning rate for the training model",
                 reference="lr"
-            ),
-            V1beta1TrialParameterSpec(
-                name="randomState",
-                description="Random state for the training model",
-                reference="rs"
             )
         ],
         trial_spec=trial_spec,
@@ -253,8 +186,8 @@ def katib_pipeline(
     booster: str = 'gbtree', 
     learning_rate_min: float = 0.01, 
     learning_rate_max: float = 0.2, 
-    random_state_min: int = 1, 
-    random_state_max: int = 100, 
+    random_state: int = 42, 
+    early_stopping_rounds: int = 1000, 
     x_train_path: str = "/opt/xgboost/datasets/x_train.csv", 
     x_test_path: str = "/opt/xgboost/datasets/x_test.csv", 
     y_train_path: str = "/opt/xgboost/datasets/y_train.csv", 
@@ -282,8 +215,8 @@ def katib_pipeline(
         booster=booster, 
         learning_rate_min=learning_rate_min,
         learning_rate_max=learning_rate_max, 
-        random_state_min=random_state_min, 
-        random_state_max=random_state_max, 
+        random_state=random_state, 
+        early_stopping_rounds=early_stopping_rounds, 
         x_train_path=x_train_path, 
         x_test_path=x_test_path, 
         y_train_path=y_train_path, 
