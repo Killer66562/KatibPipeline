@@ -166,7 +166,10 @@ deploymentSpec:
           \           parameters=parameters,\n            trial_template=trial_template,\n\
           \        )\n    )\n\n    client = KatibClient(namespace=client_namespace)\n\
           \    client.create_experiment(experiment=experiment)\n    client.wait_for_experiment_condition(name=experiment_name,\
-          \ namespace=experiment_namespace, timeout=3600)\n\n"
+          \ namespace=experiment_namespace, timeout=3600)\n\n    result = client.get_optimal_hyperparameters(name=experiment_name,\
+          \ namespace=experiment_namespace)\n\n    print(\"=========================================\"\
+          )\n    print(result)\n    print(\"=========================================\"\
+          )\n\n"
         image: python:3.10-slim
 pipelineInfo:
   description: 'load_data_task = load_data()

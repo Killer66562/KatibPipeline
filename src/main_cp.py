@@ -172,6 +172,12 @@ def create_katib_experiment_task(
     client = KatibClient(namespace=client_namespace)
     client.create_experiment(experiment=experiment)
     client.wait_for_experiment_condition(name=experiment_name, namespace=experiment_namespace, timeout=3600)
+
+    result = client.get_optimal_hyperparameters(name=experiment_name, namespace=experiment_namespace)
+
+    print("=========================================")
+    print(result)
+    print("=========================================")
     
 
 @dsl.pipeline
