@@ -1,4 +1,5 @@
 from kfp import dsl, compiler
+from kfp.dsl import Output, Metrics
 
 
 @dsl.component(
@@ -28,7 +29,8 @@ def create_katib_experiment_task(
     datasets_pvc_name: str, 
     datasets_pvc_mount_path: str, 
     models_pvc_name: str, 
-    save_model: bool
+    save_model: bool, 
+    best_params_metrics: Output[Metrics]
 ):
     from kubeflow.katib import KatibClient
     from kubernetes.client import V1ObjectMeta
@@ -175,9 +177,12 @@ def create_katib_experiment_task(
 
     result = client.get_optimal_hyperparameters(name=experiment_name, namespace=experiment_namespace)
 
-    print("=========================================")
-    print(result)
-    print("=========================================")
+    best_params_list = result["parameter_assignments"]
+
+    for params in best_params_list:
+        name = params["name"]
+        value = params["value"]
+        best_params_metrics.log_metric(metric=name, value=value)
     
 
 @dsl.pipeline

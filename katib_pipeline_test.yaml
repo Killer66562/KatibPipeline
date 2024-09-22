@@ -24,6 +24,8 @@
 #    x_train_path: str [Default: '/opt/xgboost/datasets/x_train.csv']
 #    y_test_path: str [Default: '/opt/xgboost/datasets/y_test.csv']
 #    y_train_path: str [Default: '/opt/xgboost/datasets/y_train.csv']
+# Outputs:
+#    create-katib-experiment-task-best_params_metrics: system.Metrics
 components:
   comp-create-katib-experiment-task:
     executorLabel: exec-create-katib-experiment-task
@@ -71,6 +73,12 @@ components:
           parameterType: STRING
         y_train_path:
           parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        best_params_metrics:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
 deploymentSpec:
   executors:
     exec-create-katib-experiment-task:
@@ -108,25 +116,25 @@ deploymentSpec:
           \ early_stopping_rounds: int, \n    x_train_path: str, \n    x_test_path:\
           \ str,\n    y_train_path: str, \n    y_test_path: str, \n    datasets_from_pvc:\
           \ bool,\n    datasets_pvc_name: str, \n    datasets_pvc_mount_path: str,\
-          \ \n    models_pvc_name: str, \n    save_model: bool\n):\n    from kubeflow.katib\
-          \ import KatibClient\n    from kubernetes.client import V1ObjectMeta\n \
-          \   from kubeflow.katib import V1beta1Experiment\n    from kubeflow.katib\
-          \ import V1beta1AlgorithmSpec\n    from kubeflow.katib import V1beta1ObjectiveSpec\n\
-          \    from kubeflow.katib import V1beta1FeasibleSpace\n    from kubeflow.katib\
-          \ import V1beta1ExperimentSpec\n    from kubeflow.katib import V1beta1ObjectiveSpec\n\
-          \    from kubeflow.katib import V1beta1ParameterSpec\n    from kubeflow.katib\
-          \ import V1beta1TrialTemplate\n    from kubeflow.katib import V1beta1TrialParameterSpec\n\
-          \n    metadata = V1ObjectMeta(\n        name=experiment_name, \n       \
-          \ namespace=experiment_namespace\n    )\n\n    algorithm_spec = V1beta1AlgorithmSpec(\n\
-          \        algorithm_name=\"random\"\n    )\n\n    objective_spec = V1beta1ObjectiveSpec(\n\
-          \        type=\"maximize\",\n        goal= 0.99,\n        objective_metric_name=\"\
-          accuracy\",\n    )\n\n    parameters = [\n        V1beta1ParameterSpec(\n\
-          \            name=\"lr\",\n            parameter_type=\"double\",\n    \
-          \        feasible_space=V1beta1FeasibleSpace(\n                min=str(learning_rate_min),\n\
-          \                max=str(learning_rate_max)\n            ),\n        )\n\
-          \    ]\n\n    train_container = {\n        \"name\": \"training-container\"\
-          ,\n        \"image\": \"docker.io/killer66562/xgboost-trainer\",\n     \
-          \   \"command\": [\n            \"python3\",\n            \"/opt/xgboost/train.py\"\
+          \ \n    models_pvc_name: str, \n    save_model: bool, \n    best_params_metrics:\
+          \ Output[Metrics]\n):\n    from kubeflow.katib import KatibClient\n    from\
+          \ kubernetes.client import V1ObjectMeta\n    from kubeflow.katib import\
+          \ V1beta1Experiment\n    from kubeflow.katib import V1beta1AlgorithmSpec\n\
+          \    from kubeflow.katib import V1beta1ObjectiveSpec\n    from kubeflow.katib\
+          \ import V1beta1FeasibleSpace\n    from kubeflow.katib import V1beta1ExperimentSpec\n\
+          \    from kubeflow.katib import V1beta1ObjectiveSpec\n    from kubeflow.katib\
+          \ import V1beta1ParameterSpec\n    from kubeflow.katib import V1beta1TrialTemplate\n\
+          \    from kubeflow.katib import V1beta1TrialParameterSpec\n\n    metadata\
+          \ = V1ObjectMeta(\n        name=experiment_name, \n        namespace=experiment_namespace\n\
+          \    )\n\n    algorithm_spec = V1beta1AlgorithmSpec(\n        algorithm_name=\"\
+          random\"\n    )\n\n    objective_spec = V1beta1ObjectiveSpec(\n        type=\"\
+          maximize\",\n        goal= 0.99,\n        objective_metric_name=\"accuracy\"\
+          ,\n    )\n\n    parameters = [\n        V1beta1ParameterSpec(\n        \
+          \    name=\"lr\",\n            parameter_type=\"double\",\n            feasible_space=V1beta1FeasibleSpace(\n\
+          \                min=str(learning_rate_min),\n                max=str(learning_rate_max)\n\
+          \            ),\n        )\n    ]\n\n    train_container = {\n        \"\
+          name\": \"training-container\",\n        \"image\": \"docker.io/killer66562/xgboost-trainer\"\
+          ,\n        \"command\": [\n            \"python3\",\n            \"/opt/xgboost/train.py\"\
           ,\n            \"--lr=${trialParameters.learningRate}\",\n            f\"\
           --ne={n_estimators}\",\n            f\"--rs={random_state}\",\n        \
           \    f\"--esp=${early_stopping_rounds}\",\n            f\"--booster={booster}\"\
@@ -167,9 +175,10 @@ deploymentSpec:
           \        )\n    )\n\n    client = KatibClient(namespace=client_namespace)\n\
           \    client.create_experiment(experiment=experiment)\n    client.wait_for_experiment_condition(name=experiment_name,\
           \ namespace=experiment_namespace, timeout=3600)\n\n    result = client.get_optimal_hyperparameters(name=experiment_name,\
-          \ namespace=experiment_namespace)\n\n    print(\"=========================================\"\
-          )\n    print(result)\n    print(\"=========================================\"\
-          )\n\n"
+          \ namespace=experiment_namespace)\n\n    best_params_list = result[\"parameter_assignments\"\
+          ]\n\n    for params in best_params_list:\n        name = params[\"name\"\
+          ]\n        value = params[\"value\"]\n        best_params_metrics.log_metric(metric=name,\
+          \ value=value)\n\n"
         image: python:3.10-slim
 pipelineInfo:
   description: 'load_data_task = load_data()
@@ -178,6 +187,12 @@ pipelineInfo:
   name: katib-pipeline
 root:
   dag:
+    outputs:
+      artifacts:
+        create-katib-experiment-task-best_params_metrics:
+          artifactSelectors:
+          - outputArtifactKey: best_params_metrics
+            producerSubtask: create-katib-experiment-task
     tasks:
       create-katib-experiment-task:
         cachingOptions:
@@ -314,5 +329,11 @@ root:
         defaultValue: /opt/xgboost/datasets/y_train.csv
         isOptional: true
         parameterType: STRING
+  outputDefinitions:
+    artifacts:
+      create-katib-experiment-task-best_params_metrics:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
 schemaVersion: 2.1.0
 sdkVersion: kfp-2.2.0
