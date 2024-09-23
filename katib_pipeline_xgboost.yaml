@@ -1,0 +1,339 @@
+# PIPELINE DEFINITION
+# Name: katib-pipeline
+# Description: load_data_task = load_data()
+#              prepare_data_task = prepare_data(data_input=load_data_task.outputs['data_output'])
+# Inputs:
+#    booster: str [Default: 'gbtree']
+#    client_namespace: str [Default: 'kubeflow-user-example-com']
+#    datasets_from_pvc: bool [Default: False]
+#    datasets_pvc_mount_path: str [Default: '/opt/xgboost/datasets']
+#    datasets_pvc_name: str [Default: 'datasets-pvc']
+#    early_stopping_rounds: int [Default: 1000.0]
+#    experiment_name: str
+#    experiment_namespace: str [Default: 'kubeflow-user-example-com']
+#    learning_rate_max: float [Default: 0.2]
+#    learning_rate_min: float [Default: 0.01]
+#    max_failed_trial_counts: int [Default: 5.0]
+#    max_trial_counts: int [Default: 10.0]
+#    models_pvc_name: str [Default: 'models-pvc']
+#    n_estimators: int [Default: 2000.0]
+#    parallel_trial_counts: int [Default: 2.0]
+#    random_state: int [Default: 42.0]
+#    save_model: bool [Default: False]
+#    x_test_path: str [Default: '/opt/xgboost/datasets/x_test.csv']
+#    x_train_path: str [Default: '/opt/xgboost/datasets/x_train.csv']
+#    y_test_path: str [Default: '/opt/xgboost/datasets/y_test.csv']
+#    y_train_path: str [Default: '/opt/xgboost/datasets/y_train.csv']
+# Outputs:
+#    create-katib-experiment-task-best_params_metrics: system.Metrics
+components:
+  comp-create-katib-experiment-task:
+    executorLabel: exec-create-katib-experiment-task
+    inputDefinitions:
+      parameters:
+        booster:
+          parameterType: STRING
+        client_namespace:
+          parameterType: STRING
+        datasets_from_pvc:
+          parameterType: BOOLEAN
+        datasets_pvc_mount_path:
+          parameterType: STRING
+        datasets_pvc_name:
+          parameterType: STRING
+        early_stopping_rounds:
+          parameterType: NUMBER_INTEGER
+        experiment_name:
+          parameterType: STRING
+        experiment_namespace:
+          parameterType: STRING
+        learning_rate_max:
+          parameterType: NUMBER_DOUBLE
+        learning_rate_min:
+          parameterType: NUMBER_DOUBLE
+        max_failed_trial_counts:
+          parameterType: NUMBER_INTEGER
+        max_trial_counts:
+          parameterType: NUMBER_INTEGER
+        models_pvc_name:
+          parameterType: STRING
+        n_estimators:
+          parameterType: NUMBER_INTEGER
+        parallel_trial_counts:
+          parameterType: NUMBER_INTEGER
+        random_state:
+          parameterType: NUMBER_INTEGER
+        save_model:
+          parameterType: BOOLEAN
+        x_test_path:
+          parameterType: STRING
+        x_train_path:
+          parameterType: STRING
+        y_test_path:
+          parameterType: STRING
+        y_train_path:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        best_params_metrics:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+deploymentSpec:
+  executors:
+    exec-create-katib-experiment-task:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - create_katib_experiment_task
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.2.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'kubeflow-katib==0.17.0'\
+          \ && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef create_katib_experiment_task(\n    experiment_name: str, \n \
+          \   experiment_namespace: str, \n    client_namespace: str, \n    max_trial_counts:\
+          \ int, \n    max_failed_trial_counts: int, \n    parallel_trial_counts:\
+          \ int,\n    n_estimators: int,\n    booster: str, \n    learning_rate_min:\
+          \ float, \n    learning_rate_max: float, \n    random_state: int, \n   \
+          \ early_stopping_rounds: int, \n    x_train_path: str, \n    x_test_path:\
+          \ str,\n    y_train_path: str, \n    y_test_path: str, \n    datasets_from_pvc:\
+          \ bool,\n    datasets_pvc_name: str, \n    datasets_pvc_mount_path: str,\
+          \ \n    models_pvc_name: str, \n    save_model: bool, \n    best_params_metrics:\
+          \ Output[Metrics]\n):\n    from kubeflow.katib import KatibClient\n    from\
+          \ kubernetes.client import V1ObjectMeta\n    from kubeflow.katib import\
+          \ V1beta1Experiment\n    from kubeflow.katib import V1beta1AlgorithmSpec\n\
+          \    from kubeflow.katib import V1beta1ObjectiveSpec\n    from kubeflow.katib\
+          \ import V1beta1FeasibleSpace\n    from kubeflow.katib import V1beta1ExperimentSpec\n\
+          \    from kubeflow.katib import V1beta1ObjectiveSpec\n    from kubeflow.katib\
+          \ import V1beta1ParameterSpec\n    from kubeflow.katib import V1beta1TrialTemplate\n\
+          \    from kubeflow.katib import V1beta1TrialParameterSpec\n\n    metadata\
+          \ = V1ObjectMeta(\n        name=experiment_name, \n        namespace=experiment_namespace\n\
+          \    )\n\n    algorithm_spec = V1beta1AlgorithmSpec(\n        algorithm_name=\"\
+          random\"\n    )\n\n    objective_spec = V1beta1ObjectiveSpec(\n        type=\"\
+          maximize\",\n        goal= 0.99,\n        objective_metric_name=\"accuracy\"\
+          ,\n    )\n\n    parameters = [\n        V1beta1ParameterSpec(\n        \
+          \    name=\"lr\",\n            parameter_type=\"double\",\n            feasible_space=V1beta1FeasibleSpace(\n\
+          \                min=str(learning_rate_min),\n                max=str(learning_rate_max)\n\
+          \            ),\n        )\n    ]\n\n    train_container = {\n        \"\
+          name\": \"training-container\",\n        \"image\": \"docker.io/killer66562/xgboost-trainer\"\
+          ,\n        \"command\": [\n            \"python3\",\n            \"/opt/xgboost/train.py\"\
+          ,\n            \"--lr=${trialParameters.learningRate}\",\n            f\"\
+          --ne={n_estimators}\",\n            f\"--rs={random_state}\",\n        \
+          \    f\"--esp=${early_stopping_rounds}\",\n            f\"--booster={booster}\"\
+          ,\n            f\"--x_train_path={x_train_path}\",\n            f\"--x_test_path={x_test_path}\"\
+          ,\n            f\"--y_train_path={y_train_path}\",\n            f\"--y_test_path={y_test_path}\"\
+          ,\n            f\"--save_model={save_model}\",\n            f\"--model_folder_path=models\"\
+          \n        ]\n    }\n    template_spec = {\n        \"containers\": [\n \
+          \           train_container\n        ],\n        \"restartPolicy\": \"Never\"\
+          \n    }\n\n    volumes = []\n    volumeMounts = []\n\n    if datasets_from_pvc\
+          \ is True:\n        volumes.append({\n            \"name\": \"datasets\"\
+          , \n            \"persistentVolumeClaim\": {\n                \"claimName\"\
+          : datasets_pvc_name\n            }\n        })\n        volumeMounts.append({\n\
+          \            \"name\": \"datasets\", \n            \"mountPath\": datasets_pvc_mount_path\n\
+          \        })\n\n    if save_model is True:\n        volumes.append({\n  \
+          \          \"name\": \"models\", \n            \"persistentVolumeClaim\"\
+          : {\n                \"claimName\": models_pvc_name\n            }\n   \
+          \     })\n        volumeMounts.append({\n            \"name\": \"models\"\
+          , \n            \"mountPath\": \"/opt/xgboost/models\"\n        })\n\n \
+          \   if datasets_from_pvc is True or save_model is True:\n        train_container[\"\
+          volumeMounts\"] = volumeMounts\n        template_spec[\"volumes\"] = volumes\n\
+          \n\n    trial_spec={\n        \"apiVersion\": \"batch/v1\",\n        \"\
+          kind\": \"Job\",\n        \"spec\": {\n            \"template\": {\n   \
+          \             \"metadata\": {\n                    \"annotations\": {\n\
+          \                        \"sidecar.istio.io/inject\": \"false\"\n      \
+          \              }\n                },\n                \"spec\": template_spec\n\
+          \            }\n        }\n    }\n\n    trial_template=V1beta1TrialTemplate(\n\
+          \        primary_container_name=\"training-container\",\n        trial_parameters=[\n\
+          \            V1beta1TrialParameterSpec(\n                name=\"learningRate\"\
+          ,\n                description=\"Learning rate for the training model\"\
+          ,\n                reference=\"lr\"\n            )\n        ],\n       \
+          \ trial_spec=trial_spec,\n        retain=True\n    )\n\n    experiment =\
+          \ V1beta1Experiment(\n        api_version=\"kubeflow.org/v1beta1\",\n  \
+          \      kind=\"Experiment\",\n        metadata=metadata,\n        spec=V1beta1ExperimentSpec(\n\
+          \            max_trial_count=max_trial_counts,\n            parallel_trial_count=parallel_trial_counts,\n\
+          \            max_failed_trial_count=max_failed_trial_counts,\n         \
+          \   algorithm=algorithm_spec,\n            objective=objective_spec,\n \
+          \           parameters=parameters,\n            trial_template=trial_template,\n\
+          \        )\n    )\n\n    client = KatibClient(namespace=client_namespace)\n\
+          \    client.create_experiment(experiment=experiment)\n    client.wait_for_experiment_condition(name=experiment_name,\
+          \ namespace=experiment_namespace, timeout=3600)\n\n    result = client.get_optimal_hyperparameters(name=experiment_name,\
+          \ namespace=experiment_namespace).to_dict()\n\n    best_params_list = result[\"\
+          parameter_assignments\"]\n\n    for params in best_params_list:\n      \
+          \  name = params[\"name\"]\n        value = params[\"value\"]\n        best_params_metrics.log_metric(metric=name,\
+          \ value=value)\n\n"
+        image: python:3.10-slim
+pipelineInfo:
+  description: 'load_data_task = load_data()
+
+    prepare_data_task = prepare_data(data_input=load_data_task.outputs[''data_output''])'
+  name: katib-pipeline
+root:
+  dag:
+    outputs:
+      artifacts:
+        create-katib-experiment-task-best_params_metrics:
+          artifactSelectors:
+          - outputArtifactKey: best_params_metrics
+            producerSubtask: create-katib-experiment-task
+    tasks:
+      create-katib-experiment-task:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-create-katib-experiment-task
+        inputs:
+          parameters:
+            booster:
+              componentInputParameter: booster
+            client_namespace:
+              componentInputParameter: client_namespace
+            datasets_from_pvc:
+              componentInputParameter: datasets_from_pvc
+            datasets_pvc_mount_path:
+              componentInputParameter: datasets_pvc_mount_path
+            datasets_pvc_name:
+              componentInputParameter: datasets_pvc_name
+            early_stopping_rounds:
+              componentInputParameter: early_stopping_rounds
+            experiment_name:
+              componentInputParameter: experiment_name
+            experiment_namespace:
+              componentInputParameter: experiment_namespace
+            learning_rate_max:
+              componentInputParameter: learning_rate_max
+            learning_rate_min:
+              componentInputParameter: learning_rate_min
+            max_failed_trial_counts:
+              componentInputParameter: max_failed_trial_counts
+            max_trial_counts:
+              componentInputParameter: max_trial_counts
+            models_pvc_name:
+              componentInputParameter: models_pvc_name
+            n_estimators:
+              componentInputParameter: n_estimators
+            parallel_trial_counts:
+              componentInputParameter: parallel_trial_counts
+            random_state:
+              componentInputParameter: random_state
+            save_model:
+              componentInputParameter: save_model
+            x_test_path:
+              componentInputParameter: x_test_path
+            x_train_path:
+              componentInputParameter: x_train_path
+            y_test_path:
+              componentInputParameter: y_test_path
+            y_train_path:
+              componentInputParameter: y_train_path
+        taskInfo:
+          name: create-katib-experiment-task
+  inputDefinitions:
+    parameters:
+      booster:
+        defaultValue: gbtree
+        isOptional: true
+        parameterType: STRING
+      client_namespace:
+        defaultValue: kubeflow-user-example-com
+        isOptional: true
+        parameterType: STRING
+      datasets_from_pvc:
+        defaultValue: false
+        isOptional: true
+        parameterType: BOOLEAN
+      datasets_pvc_mount_path:
+        defaultValue: /opt/xgboost/datasets
+        isOptional: true
+        parameterType: STRING
+      datasets_pvc_name:
+        defaultValue: datasets-pvc
+        isOptional: true
+        parameterType: STRING
+      early_stopping_rounds:
+        defaultValue: 1000.0
+        isOptional: true
+        parameterType: NUMBER_INTEGER
+      experiment_name:
+        parameterType: STRING
+      experiment_namespace:
+        defaultValue: kubeflow-user-example-com
+        isOptional: true
+        parameterType: STRING
+      learning_rate_max:
+        defaultValue: 0.2
+        isOptional: true
+        parameterType: NUMBER_DOUBLE
+      learning_rate_min:
+        defaultValue: 0.01
+        isOptional: true
+        parameterType: NUMBER_DOUBLE
+      max_failed_trial_counts:
+        defaultValue: 5.0
+        isOptional: true
+        parameterType: NUMBER_INTEGER
+      max_trial_counts:
+        defaultValue: 10.0
+        isOptional: true
+        parameterType: NUMBER_INTEGER
+      models_pvc_name:
+        defaultValue: models-pvc
+        isOptional: true
+        parameterType: STRING
+      n_estimators:
+        defaultValue: 2000.0
+        isOptional: true
+        parameterType: NUMBER_INTEGER
+      parallel_trial_counts:
+        defaultValue: 2.0
+        isOptional: true
+        parameterType: NUMBER_INTEGER
+      random_state:
+        defaultValue: 42.0
+        isOptional: true
+        parameterType: NUMBER_INTEGER
+      save_model:
+        defaultValue: false
+        isOptional: true
+        parameterType: BOOLEAN
+      x_test_path:
+        defaultValue: /opt/xgboost/datasets/x_test.csv
+        isOptional: true
+        parameterType: STRING
+      x_train_path:
+        defaultValue: /opt/xgboost/datasets/x_train.csv
+        isOptional: true
+        parameterType: STRING
+      y_test_path:
+        defaultValue: /opt/xgboost/datasets/y_test.csv
+        isOptional: true
+        parameterType: STRING
+      y_train_path:
+        defaultValue: /opt/xgboost/datasets/y_train.csv
+        isOptional: true
+        parameterType: STRING
+  outputDefinitions:
+    artifacts:
+      create-katib-experiment-task-best_params_metrics:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.2.0
