@@ -7,6 +7,7 @@
 #    datasets_from_pvc: bool [Default: False]
 #    datasets_pvc_mount_path: str [Default: '/opt/rfc/datasets']
 #    datasets_pvc_name: str [Default: 'datasets-pvc']
+#    docker_image_name: str [Default: 'killer66562/rfc-trainer:latest']
 #    experiment_name: str
 #    experiment_namespace: str [Default: 'kubeflow-user-example-com']
 #    max_failed_trial_counts: int [Default: 5.0]
@@ -34,6 +35,8 @@ components:
         datasets_pvc_mount_path:
           parameterType: STRING
         datasets_pvc_name:
+          parameterType: STRING
+        docker_image_name:
           parameterType: STRING
         experiment_name:
           parameterType: STRING
@@ -96,32 +99,32 @@ deploymentSpec:
 
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef create_katib_experiment_task(\n    experiment_name: str, \n \
-          \   experiment_namespace: str, \n    client_namespace: str, \n    max_trial_counts:\
-          \ int, \n    max_failed_trial_counts: int, \n    parallel_trial_counts:\
-          \ int,\n    n_estimators_min: int,\n    n_estimators_max: int,\n    x_train_path:\
-          \ str, \n    x_test_path: str,\n    y_train_path: str, \n    y_test_path:\
-          \ str, \n    datasets_from_pvc: bool,\n    datasets_pvc_name: str, \n  \
-          \  datasets_pvc_mount_path: str, \n    models_pvc_name: str, \n    save_model:\
-          \ bool, \n    best_params_metrics: Output[Metrics]\n):\n    from kubeflow.katib\
-          \ import KatibClient\n    from kubernetes.client import V1ObjectMeta\n \
-          \   from kubeflow.katib import V1beta1Experiment\n    from kubeflow.katib\
-          \ import V1beta1AlgorithmSpec\n    from kubeflow.katib import V1beta1ObjectiveSpec\n\
-          \    from kubeflow.katib import V1beta1FeasibleSpace\n    from kubeflow.katib\
-          \ import V1beta1ExperimentSpec\n    from kubeflow.katib import V1beta1ObjectiveSpec\n\
-          \    from kubeflow.katib import V1beta1ParameterSpec\n    from kubeflow.katib\
-          \ import V1beta1TrialTemplate\n    from kubeflow.katib import V1beta1TrialParameterSpec\n\
-          \n    metadata = V1ObjectMeta(\n        name=experiment_name, \n       \
-          \ namespace=experiment_namespace\n    )\n\n    algorithm_spec = V1beta1AlgorithmSpec(\n\
-          \        algorithm_name=\"random\"\n    )\n\n    objective_spec = V1beta1ObjectiveSpec(\n\
-          \        type=\"maximize\",\n        goal= 0.99,\n        objective_metric_name=\"\
-          accuracy\",\n    )\n\n    parameters = [\n        V1beta1ParameterSpec(\n\
-          \            name=\"ne\",\n            parameter_type=\"int\",\n       \
-          \     feasible_space=V1beta1FeasibleSpace(\n                min=str(n_estimators_min),\n\
-          \                max=str(n_estimators_max)\n            ),\n        )\n\
-          \    ]\n\n    train_container = {\n        \"name\": \"training-container\"\
-          ,\n        \"image\": \"docker.io/killer66562/rfc-trainer\",\n        \"\
-          command\": [\n            \"python3\",\n            \"/opt/rfc/train.py\"\
+          \ *\n\ndef create_katib_experiment_task(\n    docker_image_name: str, \n\
+          \    experiment_name: str, \n    experiment_namespace: str, \n    client_namespace:\
+          \ str, \n    max_trial_counts: int, \n    max_failed_trial_counts: int,\
+          \ \n    parallel_trial_counts: int,\n    n_estimators_min: int,\n    n_estimators_max:\
+          \ int,\n    x_train_path: str, \n    x_test_path: str,\n    y_train_path:\
+          \ str, \n    y_test_path: str, \n    datasets_from_pvc: bool,\n    datasets_pvc_name:\
+          \ str, \n    datasets_pvc_mount_path: str, \n    models_pvc_name: str, \n\
+          \    save_model: bool, \n    best_params_metrics: Output[Metrics]\n):\n\
+          \    from kubeflow.katib import KatibClient\n    from kubernetes.client\
+          \ import V1ObjectMeta\n    from kubeflow.katib import V1beta1Experiment\n\
+          \    from kubeflow.katib import V1beta1AlgorithmSpec\n    from kubeflow.katib\
+          \ import V1beta1ObjectiveSpec\n    from kubeflow.katib import V1beta1FeasibleSpace\n\
+          \    from kubeflow.katib import V1beta1ExperimentSpec\n    from kubeflow.katib\
+          \ import V1beta1ObjectiveSpec\n    from kubeflow.katib import V1beta1ParameterSpec\n\
+          \    from kubeflow.katib import V1beta1TrialTemplate\n    from kubeflow.katib\
+          \ import V1beta1TrialParameterSpec\n\n    metadata = V1ObjectMeta(\n   \
+          \     name=experiment_name, \n        namespace=experiment_namespace\n \
+          \   )\n\n    algorithm_spec = V1beta1AlgorithmSpec(\n        algorithm_name=\"\
+          random\"\n    )\n\n    objective_spec = V1beta1ObjectiveSpec(\n        type=\"\
+          maximize\",\n        goal= 0.99,\n        objective_metric_name=\"accuracy\"\
+          ,\n    )\n\n    parameters = [\n        V1beta1ParameterSpec(\n        \
+          \    name=\"ne\",\n            parameter_type=\"int\",\n            feasible_space=V1beta1FeasibleSpace(\n\
+          \                min=str(n_estimators_min),\n                max=str(n_estimators_max)\n\
+          \            ),\n        )\n    ]\n\n    train_container = {\n        \"\
+          name\": \"training-container\",\n        \"image\": f\"docker.io/{docker_image_name}\"\
+          ,\n        \"command\": [\n            \"python3\",\n            \"/opt/rfc/train.py\"\
           ,\n            \"--ne=${trialParameters.nEstimators}\",\n            f\"\
           --x_train_path={x_train_path}\",\n            f\"--x_test_path={x_test_path}\"\
           ,\n            f\"--y_train_path={y_train_path}\",\n            f\"--y_test_path={y_test_path}\"\
@@ -194,6 +197,8 @@ root:
               componentInputParameter: datasets_pvc_mount_path
             datasets_pvc_name:
               componentInputParameter: datasets_pvc_name
+            docker_image_name:
+              componentInputParameter: docker_image_name
             experiment_name:
               componentInputParameter: experiment_name
             experiment_namespace:
@@ -238,6 +243,10 @@ root:
         parameterType: STRING
       datasets_pvc_name:
         defaultValue: datasets-pvc
+        isOptional: true
+        parameterType: STRING
+      docker_image_name:
+        defaultValue: killer66562/rfc-trainer:latest
         isOptional: true
         parameterType: STRING
       experiment_name:
