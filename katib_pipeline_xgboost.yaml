@@ -8,6 +8,7 @@
 #    datasets_from_pvc: bool [Default: False]
 #    datasets_pvc_mount_path: str [Default: '/opt/xgboost/datasets']
 #    datasets_pvc_name: str [Default: 'datasets-pvc']
+#    docker_image_name: str [Default: 'killer66562/xgboost-trainer:latest']
 #    early_stopping_rounds: int [Default: 1000.0]
 #    experiment_name: str
 #    experiment_namespace: str [Default: 'kubeflow-user-example-com']
@@ -40,6 +41,8 @@ components:
         datasets_pvc_mount_path:
           parameterType: STRING
         datasets_pvc_name:
+          parameterType: STRING
+        docker_image_name:
           parameterType: STRING
         early_stopping_rounds:
           parameterType: NUMBER_INTEGER
@@ -108,34 +111,35 @@ deploymentSpec:
 
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef create_katib_experiment_task(\n    experiment_name: str, \n \
-          \   experiment_namespace: str, \n    client_namespace: str, \n    max_trial_counts:\
-          \ int, \n    max_failed_trial_counts: int, \n    parallel_trial_counts:\
-          \ int,\n    n_estimators: int,\n    booster: str, \n    learning_rate_min:\
-          \ float, \n    learning_rate_max: float, \n    random_state: int, \n   \
-          \ early_stopping_rounds: int, \n    x_train_path: str, \n    x_test_path:\
-          \ str,\n    y_train_path: str, \n    y_test_path: str, \n    datasets_from_pvc:\
-          \ bool,\n    datasets_pvc_name: str, \n    datasets_pvc_mount_path: str,\
-          \ \n    models_pvc_name: str, \n    save_model: bool, \n    best_params_metrics:\
-          \ Output[Metrics]\n):\n    from kubeflow.katib import KatibClient\n    from\
-          \ kubernetes.client import V1ObjectMeta\n    from kubeflow.katib import\
-          \ V1beta1Experiment\n    from kubeflow.katib import V1beta1AlgorithmSpec\n\
-          \    from kubeflow.katib import V1beta1ObjectiveSpec\n    from kubeflow.katib\
-          \ import V1beta1FeasibleSpace\n    from kubeflow.katib import V1beta1ExperimentSpec\n\
-          \    from kubeflow.katib import V1beta1ObjectiveSpec\n    from kubeflow.katib\
-          \ import V1beta1ParameterSpec\n    from kubeflow.katib import V1beta1TrialTemplate\n\
-          \    from kubeflow.katib import V1beta1TrialParameterSpec\n\n    metadata\
-          \ = V1ObjectMeta(\n        name=experiment_name, \n        namespace=experiment_namespace\n\
-          \    )\n\n    algorithm_spec = V1beta1AlgorithmSpec(\n        algorithm_name=\"\
-          random\"\n    )\n\n    objective_spec = V1beta1ObjectiveSpec(\n        type=\"\
-          maximize\",\n        goal= 0.99,\n        objective_metric_name=\"accuracy\"\
-          ,\n    )\n\n    parameters = [\n        V1beta1ParameterSpec(\n        \
-          \    name=\"lr\",\n            parameter_type=\"double\",\n            feasible_space=V1beta1FeasibleSpace(\n\
-          \                min=str(learning_rate_min),\n                max=str(learning_rate_max)\n\
-          \            ),\n        )\n    ]\n\n    train_container = {\n        \"\
-          name\": \"training-container\",\n        \"image\": \"docker.io/killer66562/xgboost-trainer\"\
-          ,\n        \"command\": [\n            \"python3\",\n            \"/opt/xgboost/train.py\"\
-          ,\n            \"--lr=${trialParameters.learningRate}\",\n            f\"\
+          \ *\n\ndef create_katib_experiment_task(\n    docker_image_name: str, \n\
+          \    experiment_name: str, \n    experiment_namespace: str, \n    client_namespace:\
+          \ str, \n    max_trial_counts: int, \n    max_failed_trial_counts: int,\
+          \ \n    parallel_trial_counts: int,\n    n_estimators: int,\n    booster:\
+          \ str, \n    learning_rate_min: float, \n    learning_rate_max: float, \n\
+          \    random_state: int, \n    early_stopping_rounds: int, \n    x_train_path:\
+          \ str, \n    x_test_path: str,\n    y_train_path: str, \n    y_test_path:\
+          \ str, \n    datasets_from_pvc: bool,\n    datasets_pvc_name: str, \n  \
+          \  datasets_pvc_mount_path: str, \n    models_pvc_name: str, \n    save_model:\
+          \ bool, \n    best_params_metrics: Output[Metrics]\n):\n    from kubeflow.katib\
+          \ import KatibClient\n    from kubernetes.client import V1ObjectMeta\n \
+          \   from kubeflow.katib import V1beta1Experiment\n    from kubeflow.katib\
+          \ import V1beta1AlgorithmSpec\n    from kubeflow.katib import V1beta1ObjectiveSpec\n\
+          \    from kubeflow.katib import V1beta1FeasibleSpace\n    from kubeflow.katib\
+          \ import V1beta1ExperimentSpec\n    from kubeflow.katib import V1beta1ObjectiveSpec\n\
+          \    from kubeflow.katib import V1beta1ParameterSpec\n    from kubeflow.katib\
+          \ import V1beta1TrialTemplate\n    from kubeflow.katib import V1beta1TrialParameterSpec\n\
+          \n    metadata = V1ObjectMeta(\n        name=experiment_name, \n       \
+          \ namespace=experiment_namespace\n    )\n\n    algorithm_spec = V1beta1AlgorithmSpec(\n\
+          \        algorithm_name=\"random\"\n    )\n\n    objective_spec = V1beta1ObjectiveSpec(\n\
+          \        type=\"maximize\",\n        goal= 0.99,\n        objective_metric_name=\"\
+          accuracy\",\n    )\n\n    parameters = [\n        V1beta1ParameterSpec(\n\
+          \            name=\"lr\",\n            parameter_type=\"double\",\n    \
+          \        feasible_space=V1beta1FeasibleSpace(\n                min=str(learning_rate_min),\n\
+          \                max=str(learning_rate_max)\n            ),\n        )\n\
+          \    ]\n\n    train_container = {\n        \"name\": \"training-container\"\
+          ,\n        \"image\": f\"docker.io/{docker_image_name}\",\n        \"command\"\
+          : [\n            \"python3\",\n            \"/opt/xgboost/train.py\",\n\
+          \            \"--lr=${trialParameters.learningRate}\",\n            f\"\
           --ne={n_estimators}\",\n            f\"--rs={random_state}\",\n        \
           \    f\"--esp=${early_stopping_rounds}\",\n            f\"--booster={booster}\"\
           ,\n            f\"--x_train_path={x_train_path}\",\n            f\"--x_test_path={x_test_path}\"\
@@ -211,6 +215,8 @@ root:
               componentInputParameter: datasets_pvc_mount_path
             datasets_pvc_name:
               componentInputParameter: datasets_pvc_name
+            docker_image_name:
+              componentInputParameter: docker_image_name
             early_stopping_rounds:
               componentInputParameter: early_stopping_rounds
             experiment_name:
@@ -265,6 +271,10 @@ root:
         parameterType: STRING
       datasets_pvc_name:
         defaultValue: datasets-pvc
+        isOptional: true
+        parameterType: STRING
+      docker_image_name:
+        defaultValue: killer66562/xgboost-trainer:latest
         isOptional: true
         parameterType: STRING
       early_stopping_rounds:

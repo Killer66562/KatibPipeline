@@ -9,6 +9,7 @@ from kfp.dsl import Output, Metrics
     ]
 )
 def create_katib_experiment_task(
+    docker_image_name: str, 
     experiment_name: str, 
     experiment_namespace: str, 
     client_namespace: str, 
@@ -72,7 +73,7 @@ def create_katib_experiment_task(
 
     train_container = {
         "name": "training-container",
-        "image": "docker.io/killer66562/xgboost-trainer",
+        "image": f"docker.io/{docker_image_name}",
         "command": [
             "python3",
             "/opt/xgboost/train.py",
@@ -190,6 +191,7 @@ def katib_pipeline(
     experiment_name: str, 
     experiment_namespace: str = 'kubeflow-user-example-com', 
     client_namespace: str = 'kubeflow-user-example-com', 
+    docker_image_name: str = "killer66562/xgboost-trainer:latest", 
     max_trial_counts: int = 10, 
     max_failed_trial_counts: int = 5, 
     parallel_trial_counts: int = 2,
@@ -216,6 +218,7 @@ def katib_pipeline(
     '''
     
     create_katib_experiment_task(
+        docker_image_name=docker_image_name, 
         experiment_name=experiment_name, 
         experiment_namespace=experiment_namespace,
         client_namespace=client_namespace,
