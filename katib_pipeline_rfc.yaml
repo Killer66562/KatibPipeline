@@ -5,7 +5,7 @@
 # Inputs:
 #    client_namespace: str [Default: 'kubeflow-user-example-com']
 #    datasets_from_pvc: bool [Default: False]
-#    datasets_pvc_mount_path: str [Default: '/opt/xgboost/datasets']
+#    datasets_pvc_mount_path: str [Default: '/opt/rfc/datasets']
 #    datasets_pvc_name: str [Default: 'datasets-pvc']
 #    experiment_name: str
 #    experiment_namespace: str [Default: 'kubeflow-user-example-com']
@@ -16,10 +16,10 @@
 #    n_estimators_min: int [Default: 100.0]
 #    parallel_trial_counts: int [Default: 2.0]
 #    save_model: bool [Default: False]
-#    x_test_path: str [Default: '/opt/xgboost/datasets/x_test.csv']
-#    x_train_path: str [Default: '/opt/xgboost/datasets/x_train.csv']
-#    y_test_path: str [Default: '/opt/xgboost/datasets/y_test.csv']
-#    y_train_path: str [Default: '/opt/xgboost/datasets/y_train.csv']
+#    x_test_path: str [Default: '/opt/rfc/datasets/x_test.csv']
+#    x_train_path: str [Default: '/opt/rfc/datasets/x_train.csv']
+#    y_test_path: str [Default: '/opt/rfc/datasets/y_test.csv']
+#    y_train_path: str [Default: '/opt/rfc/datasets/y_train.csv']
 # Outputs:
 #    create-katib-experiment-task-best_params_metrics: system.Metrics
 components:
@@ -121,7 +121,7 @@ deploymentSpec:
           \                max=str(n_estimators_max)\n            ),\n        )\n\
           \    ]\n\n    train_container = {\n        \"name\": \"training-container\"\
           ,\n        \"image\": \"docker.io/killer66562/rfc-trainer\",\n        \"\
-          command\": [\n            \"python3\",\n            \"/opt/xgboost/train.py\"\
+          command\": [\n            \"python3\",\n            \"/opt/rfc/train.py\"\
           ,\n            \"--ne=${trialParameters.nEstimators}\",\n            f\"\
           --x_train_path={x_train_path}\",\n            f\"--x_test_path={x_test_path}\"\
           ,\n            f\"--y_train_path={y_train_path}\",\n            f\"--y_test_path={y_test_path}\"\
@@ -137,8 +137,8 @@ deploymentSpec:
           \          \"name\": \"models\", \n            \"persistentVolumeClaim\"\
           : {\n                \"claimName\": models_pvc_name\n            }\n   \
           \     })\n        volumeMounts.append({\n            \"name\": \"models\"\
-          , \n            \"mountPath\": \"/opt/xgboost/models\"\n        })\n\n \
-          \   if datasets_from_pvc is True or save_model is True:\n        train_container[\"\
+          , \n            \"mountPath\": \"/opt/rfc/models\"\n        })\n\n    if\
+          \ datasets_from_pvc is True or save_model is True:\n        train_container[\"\
           volumeMounts\"] = volumeMounts\n        template_spec[\"volumes\"] = volumes\n\
           \n\n    trial_spec={\n        \"apiVersion\": \"batch/v1\",\n        \"\
           kind\": \"Job\",\n        \"spec\": {\n            \"template\": {\n   \
@@ -233,7 +233,7 @@ root:
         isOptional: true
         parameterType: BOOLEAN
       datasets_pvc_mount_path:
-        defaultValue: /opt/xgboost/datasets
+        defaultValue: /opt/rfc/datasets
         isOptional: true
         parameterType: STRING
       datasets_pvc_name:
@@ -275,19 +275,19 @@ root:
         isOptional: true
         parameterType: BOOLEAN
       x_test_path:
-        defaultValue: /opt/xgboost/datasets/x_test.csv
+        defaultValue: /opt/rfc/datasets/x_test.csv
         isOptional: true
         parameterType: STRING
       x_train_path:
-        defaultValue: /opt/xgboost/datasets/x_train.csv
+        defaultValue: /opt/rfc/datasets/x_train.csv
         isOptional: true
         parameterType: STRING
       y_test_path:
-        defaultValue: /opt/xgboost/datasets/y_test.csv
+        defaultValue: /opt/rfc/datasets/y_test.csv
         isOptional: true
         parameterType: STRING
       y_train_path:
-        defaultValue: /opt/xgboost/datasets/y_train.csv
+        defaultValue: /opt/rfc/datasets/y_train.csv
         isOptional: true
         parameterType: STRING
   outputDefinitions:

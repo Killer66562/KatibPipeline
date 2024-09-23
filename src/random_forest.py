@@ -71,7 +71,7 @@ def create_katib_experiment_task(
         "image": "docker.io/killer66562/rfc-trainer",
         "command": [
             "python3",
-            "/opt/xgboost/train.py",
+            "/opt/rfc/train.py",
             "--ne=${trialParameters.nEstimators}",
             f"--x_train_path={x_train_path}",
             f"--x_test_path={x_test_path}",
@@ -112,7 +112,7 @@ def create_katib_experiment_task(
         })
         volumeMounts.append({
             "name": "models", 
-            "mountPath": "/opt/xgboost/models"
+            "mountPath": "/opt/rfc/models"
         })
 
     if datasets_from_pvc is True or save_model is True:
@@ -187,13 +187,13 @@ def katib_pipeline(
     parallel_trial_counts: int = 2,
     n_estimators_min: int = 100, 
     n_estimators_max: int = 2000, 
-    x_train_path: str = "/opt/xgboost/datasets/x_train.csv", 
-    x_test_path: str = "/opt/xgboost/datasets/x_test.csv", 
-    y_train_path: str = "/opt/xgboost/datasets/y_train.csv", 
-    y_test_path: str = "/opt/xgboost/datasets/y_test.csv", 
+    x_train_path: str = "/opt/rfc/datasets/x_train.csv", 
+    x_test_path: str = "/opt/rfc/datasets/x_test.csv", 
+    y_train_path: str = "/opt/rfc/datasets/y_train.csv", 
+    y_test_path: str = "/opt/rfc/datasets/y_test.csv", 
     datasets_from_pvc: bool = False, 
     datasets_pvc_name: str = "datasets-pvc", 
-    datasets_pvc_mount_path: str = "/opt/xgboost/datasets", 
+    datasets_pvc_mount_path: str = "/opt/rfc/datasets", 
     models_pvc_name: str = "models-pvc", 
     save_model: bool = False
 ):
