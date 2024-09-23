@@ -239,4 +239,4 @@ def katib_pipeline(
         save_model=save_model
     )
 
-compiler.Compiler().compile(katib_pipeline, 'katib_pipeline_test.yaml')
+compiler.Compiler().compile(katib_pipeline, 'katib_pipeline_xgboost.yaml')
