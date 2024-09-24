@@ -312,7 +312,7 @@ def compose_pipeline(
         mount_path=str(params_mount_path)
     )
 
-    run_xgboost_katib_experiment(
+    xgboost_katib_experiment_task = run_xgboost_katib_experiment(
         time_str=get_time_str_task.output, 
         input_params_metrics=parse_input_json_task.outputs["xgboost_input_metrics"]
     )
