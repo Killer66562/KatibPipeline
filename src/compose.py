@@ -681,7 +681,7 @@ def run_knn_katib_experiment(
         "command": [
             "python3",
             "/opt/knn/train.py",
-            "--ne=${trialParameters.nNeighbors}",
+            "--nn=${trialParameters.nNeighbors}",
             f"--rs={random_state}",
             f"--x_train_path={x_train_path}",
             f"--x_test_path={x_test_path}",
