@@ -104,10 +104,10 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.2.0'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.9.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'kubeflow-katib'\
-          \ && \"$0\" \"$@\"\n"
+          \ 'pandas' && \"$0\" \"$@\"\n"
         - sh
         - -ec
         - 'program_path=$(mktemp -d)
@@ -127,13 +127,16 @@ deploymentSpec:
           \   n_estimators_max: int,\n    learning_rate_min: float, \n    learning_rate_max:\
           \ float, \n    cpu_per_trial: int\n):\n    import kubeflow.katib as katib\n\
           \n    def objective(parameters):\n        import pandas as pd\n\n      \
-          \  x_train_df = pd.read_csv(parameters['x_train_uri'])\n        print(x_train_df)\n\
-          \n        y_train_df = pd.read_csv(parameters['y_train_uri'])\n        print(y_train_df)\n\
-          \n        x_test_df = pd.read_csv(parameters['x_test_uri'])\n        print(x_test_df)\n\
-          \n        y_test_df = pd.read_csv(parameters['y_test_uri'])\n        print(y_test_df)\n\
-          \n        print(f\"accuracy=0\")\n\n    parameters = {\n        'n_estimators':\
-          \ katib.search.int(min=n_estimators_min, max=n_estimators_max, step=1),\
-          \ \n        'learning_rate': katib.search.double(min=learning_rate_min,\
+          \  from xgboost import XGBClassifier\n        from sklearn.metrics import\
+          \ accuracy_score\n\n        x_train_df = pd.read_csv(parameters['x_train_uri'])\n\
+          \        y_train_df = pd.read_csv(parameters['y_train_uri'])\n\n       \
+          \ x_test_df = pd.read_csv(parameters['x_test_uri'])\n        y_test_df =\
+          \ pd.read_csv(parameters['y_test_uri'])\n\n        model = XGBClassifier(n_estimators=parameters['n_estimators'],\
+          \ learning_rate=parameters['learning_rate'])\n        model.fit(x_train_df,\
+          \ y_train_df.values.ravel())\n\n        y_pred = model.predict(x_test_df)\n\
+          \        accuracy = accuracy_score(y_test_df, y_pred)\n\n        print(f\"\
+          accuracy={accuracy}\")\n\n    parameters = {\n        'n_estimators': katib.search.int(min=n_estimators_min,\
+          \ max=n_estimators_max, step=1), \n        'learning_rate': katib.search.double(min=learning_rate_min,\
           \ max=learning_rate_max, step=0.001), \n        'x_train_uri': katib.search.categorical(list=[x_train.uri]),\
           \ \n        'y_train_uri': katib.search.categorical(list=[y_train.uri]),\
           \ \n        'x_test_uri': katib.search.categorical(list=[x_test.uri]), \n\
@@ -144,9 +147,9 @@ deploymentSpec:
           \     objective_metric_name='accuracy', \n        objective_type='maximize',\
           \ \n        objective_goal=0.99, \n        max_trial_count=max_trial_counts,\
           \ \n        max_failed_trial_count=max_failed_trial_counts, \n        parallel_trial_count=parallel_trial_counts,\
-          \ \n        packages_to_install=[\n            'pandas'\n        ],\n  \
-          \      retain_trials=True, \n        resources_per_trial={\"cpu\": cpu_per_trial}\n\
-          \    )\n    client.wait_for_experiment_condition(name=experiment_name)\n\
+          \ \n        packages_to_install=[\n            'pandas', \n            'scikit-learn',\
+          \ \n            'xgboost', \n            'joblib'\n        ],\n        retain_trials=True,\
+          \ \n        resources_per_trial={\"cpu\": cpu_per_trial}\n    )\n    client.wait_for_experiment_condition(name=experiment_name)\n\
           \    print(client.get_optimal_hyperparameters(experiment_name))\n\n"
         image: python:3.11-slim
     exec-load-data:
@@ -161,7 +164,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.2.0'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.9.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'pandas==2.2.2'\
           \ && \"$0\" \"$@\"\n"
@@ -202,7 +205,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.2.0'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.9.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'pandas==2.2.2'\
           \ 'scikit-learn==1.5.1' && \"$0\" \"$@\"\n"
@@ -352,4 +355,4 @@ root:
         isOptional: true
         parameterType: NUMBER_INTEGER
 schemaVersion: 2.1.0
-sdkVersion: kfp-2.2.0
+sdkVersion: kfp-2.9.0

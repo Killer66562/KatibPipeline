@@ -1,13 +1,34 @@
 from kfp import dsl, compiler, kubernetes
-from kfp.dsl import Input, Output, Metrics, component
+from kfp.dsl import Input, Output, Metrics, Dataset, Model, Artifact, component, ContainerSpec
 
 
-@component(base_image='python:3.10-slim')
-def get_time_str() -> str:
-    from datetime import datetime, timezone, timedelta
+@component(
+    base_image='python:3.10-slim', 
+    packages_to_install=['pandas']
+)
+def load_file_from_nas_to_minio(
+    x_train_input_path: str, 
+    x_test_input_path: str, 
+    y_train_input_path: str, 
+    y_test_input_path: str, 
+    x_train_output: Output[Dataset], 
+    x_test_output: Output[Dataset], 
+    y_train_output: Output[Dataset], 
+    y_test_output: Output[Dataset]
+):
+    import pandas as pd
 
-    return datetime.now(timezone(timedelta(hours=8))).strftime("%-Y-%m-%d-%H-%M-%S")
+    df = pd.read_csv(x_train_input_path)
+    df.to_csv(x_train_output.path)
 
+    df = pd.read_csv(x_test_input_path)
+    df.to_csv(x_test_output.path)
+
+    df = pd.read_csv(y_train_input_path)
+    df.to_csv(y_train_output.path)
+
+    df = pd.read_csv(y_test_input_path)
+    df.to_csv(y_test_output.path)
 
 @component(base_image='python:3.10-slim')
 def parse_input_json(
@@ -24,7 +45,9 @@ def parse_input_json(
             else:
                 metrics.log_metric(key, input_dict.get(key))
 
-    input_dict_arr: list[dict] = json.load(json_file_path)
+    with open(file=json_file_path, mode='r', encoding='utf8') as file:
+        input_dict_arr: list[dict] = json.load(file)
+    
     for input_dict in input_dict_arr:
         if input_dict["method"] == "xgboost":
             log_metric(xgboost_input_metrics, input_dict)
@@ -40,7 +63,6 @@ def parse_input_json(
     ]
 )
 def run_xgboost_katib_experiment(
-    time_str: str, 
     input_params_metrics: Input[Metrics], 
     best_params_metrics: Output[Metrics]
 ):
@@ -56,7 +78,11 @@ def run_xgboost_katib_experiment(
     from kubeflow.katib import V1beta1TrialTemplate
     from kubeflow.katib import V1beta1TrialParameterSpec
 
-    experiment_name = "xgboost-" + time_str.replace("_", "-")
+    from datetime import datetime, timezone, timedelta
+
+    dt_str = datetime.now(timezone(timedelta(hours=8))).strftime("%-Y-%m-%d-%H-%M-%S")
+
+    experiment_name = "xgboost-" + dt_str.replace("_", "-")
     experiment_namespace = input_params_metrics.metadata.get("experiment_namespace")
 
     if experiment_name is None or experiment_namespace is None:
@@ -289,7 +315,81 @@ def run_xgboost_katib_experiment(
     for params in best_params_list:
         name = params["name"]
         value = params["value"]
+
+        if name == "lr":
+            value = float(value)
+        elif name == "ne":
+            value = int(value)
+            
         best_params_metrics.log_metric(metric=name, value=value)
+
+@dsl.component(
+    base_image='python:3.10-slim', 
+    packages_to_install=['pandas', 'xgboost', 'scikit-learn', 'joblib']
+)
+def run_xgboost_train(
+    best_params_metrics: Input[Metrics], 
+    x_train: Input[Dataset], 
+    x_test: Input[Dataset], 
+    y_train: Input[Dataset], 
+    y_test: Input[Dataset], 
+    model: Output[Model], 
+    file: Output[Artifact]
+):
+    import pandas as pd
+    import xgboost as xgb
+    import joblib
+    import json
+
+    from sklearn.metrics import accuracy_score
+
+    learning_rate = best_params_metrics.metadata.get("lr")
+    n_estimators = best_params_metrics.metadata.get("ne")
+
+    x_train_df = pd.read_csv(x_train.path, header=0)
+    y_train_df = pd.read_csv(y_train.path, header=0)
+    x_test_df = pd.read_csv(x_test.path, header=0)
+    y_test_df = pd.read_csv(y_test.path, header=0)
+
+    dtrain = xgb.DMatrix(x_train_df.values, label=y_train_df.values)
+    dtest = xgb.DMatrix(x_test_df.values, label=y_test_df.values)
+
+    scale_pos_weight = len(y_train_df[y_train_df == 0]) / len(y_train_df[y_train_df == 1])
+
+    param = {
+        'eta': learning_rate, 
+        'objective': 'binary:logistic',
+        'eval_metric': 'logloss',
+        'scale_pos_weight': scale_pos_weight
+    }
+
+    evallist = [(dtrain, 'train'), (dtest, 'eval')]
+    num_round = n_estimators
+
+    xgb_model = xgb.train(
+        param, 
+        dtrain, 
+        num_round, 
+        evallist, 
+        early_stopping_rounds=10)
+    
+    preds = xgb_model.predict(dtest)
+
+    predictions = [round(value) for value in preds]
+    xgb_accuracy = accuracy_score(y_test_df.values, predictions)
+    print('XGBoost Test accuracy:', xgb_accuracy)
+    
+    # Save the model
+    joblib.dump(xgb_model, model.path)
+
+     # Save the accuracy
+    data = {}
+    data['accuracy'] = xgb_accuracy
+    data['model_path'] = model.path
+
+    with open(file=file.path, mode='w', encoding='utf8') as file:
+        json.dump(data, file, indent=4)
+    
 
 @dsl.pipeline(
     name="compose", 
@@ -297,10 +397,20 @@ def run_xgboost_katib_experiment(
 )
 def compose_pipeline(
     params_pvc_name: str = "params-pvc", 
-    params_mount_path: str = "/mnt/params", 
     params_json_file_path: str = "/mnt/params/params.json"
 ):
-    get_time_str_task = get_time_str()
+    load_datasets_task = load_file_from_nas_to_minio(
+        x_train_input_path="/mnt/datasets/heart_disease/x_train.csv", 
+        x_test_input_path="/mnt/datasets/heart_disease/x_test.csv", 
+        y_train_input_path="/mnt/datasets/heart_disease/y_train.csv", 
+        y_test_input_path="/mnt/datasets/heart_disease/y_test.csv", 
+    )
+
+    kubernetes.mount_pvc(
+        task=load_datasets_task, 
+        pvc_name="datasets-pvc", 
+        mount_path="/mnt/datasets"
+    )
 
     parse_input_json_task = parse_input_json(
         json_file_path=params_json_file_path
@@ -308,14 +418,21 @@ def compose_pipeline(
 
     kubernetes.mount_pvc(
         task=parse_input_json_task, 
-        pvc_name=str(params_pvc_name), 
-        mount_path=str(params_mount_path)
+        pvc_name=params_pvc_name, 
+        mount_path="/mnt/params"
     )
 
     xgboost_katib_experiment_task = run_xgboost_katib_experiment(
-        time_str=get_time_str_task.output, 
         input_params_metrics=parse_input_json_task.outputs["xgboost_input_metrics"]
     )
+
+    xgboost_train_task = run_xgboost_train(
+        best_params_metrics=xgboost_katib_experiment_task.outputs['best_params_metrics'], 
+        x_train=load_datasets_task.outputs['x_train_output'], 
+        x_test=load_datasets_task.outputs['x_test_output'], 
+        y_train=load_datasets_task.outputs['y_train_output'], 
+        y_test=load_datasets_task.outputs['y_test_output']
+    ).after(xgboost_katib_experiment_task)
 
 if __name__ == "__main__":
     compiler.Compiler().compile(compose_pipeline, "compose_pipeline.yaml")

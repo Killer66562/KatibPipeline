@@ -1,7 +1,7 @@
 [
     {
         "method": "xgboost", 
-        "docker_image_name": "killer66562/xgboost-trainer:latest", 
+        "docker_image_name": "killer66562/xgboost-trainer-heart-disease:latest", 
         "learning_rate_min": 0.2, 
         "learning_rate_max": 0.7, 
         "learning_rate_step": 0.001, 
@@ -13,7 +13,7 @@
         "x_test_path": "/opt/xgboost/datasets/x_test.csv", 
         "y_train_path": "/opt/xgboost/datasets/y_train.csv", 
         "y_test_path": "/opt/xgboost/datasets/y_test.csv", 
-        "datasets_from_pvc": true, 
+        "datasets_from_pvc": false, 
         "datasets_pvc_name": "datasets", 
         "datasets_pvc_mount_path": "/opt/xgboost/datasets", 
         "max_trial_counts": 20, 
