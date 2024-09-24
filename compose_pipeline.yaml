@@ -1,0 +1,369 @@
+# PIPELINE DEFINITION
+# Name: compose
+# Description: Compose of kubeflow, katib and spark
+# Inputs:
+#    params_json_file_path: str [Default: '/mnt/params/params.json']
+#    params_mount_path: str [Default: '/mnt/params']
+#    params_pvc_name: str [Default: 'params-pvc']
+# Outputs:
+#    parse-input-json-random_forest_input_metrics: system.Metrics
+#    parse-input-json-xgboost_input_metrics: system.Metrics
+#    run-xgboost-katib-experiment-best_params_metrics: system.Metrics
+components:
+  comp-get-time-str:
+    executorLabel: exec-get-time-str
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+  comp-parse-input-json:
+    executorLabel: exec-parse-input-json
+    inputDefinitions:
+      parameters:
+        json_file_path:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        random_forest_input_metrics:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+        xgboost_input_metrics:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+  comp-run-xgboost-katib-experiment:
+    executorLabel: exec-run-xgboost-katib-experiment
+    inputDefinitions:
+      artifacts:
+        input_params_metrics:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+      parameters:
+        time_str:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        best_params_metrics:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+deploymentSpec:
+  executors:
+    exec-get-time-str:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - get_time_str
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.9.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef get_time_str() -> str:\n    from datetime import datetime, timezone,\
+          \ timedelta\n\n    return datetime.now(timezone(timedelta(hours=8))).strftime(\"\
+          %-Y-%m-%d-%H-%M-%S\")\n\n"
+        image: python:3.10-slim
+    exec-parse-input-json:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - parse_input_json
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.9.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef parse_input_json(\n    json_file_path: str, \n    xgboost_input_metrics:\
+          \ Output[Metrics], \n    random_forest_input_metrics: Output[Metrics]\n\
+          ):\n    import json\n\n    def log_metric(metrics: Metrics, input_dict:\
+          \ dict):\n        for key in input_dict:\n            if key == \"method\"\
+          :\n                continue\n            else:\n                metrics.log_metric(key,\
+          \ input_dict.get(key))\n\n    input_dict_arr: list[dict] = json.load(json_file_path)\n\
+          \    for input_dict in input_dict_arr:\n        if input_dict[\"method\"\
+          ] == \"xgboost\":\n            log_metric(xgboost_input_metrics, input_dict)\n\
+          \        elif input_dict[\"method\"] == \"random_forest\":\n           \
+          \ log_metric(random_forest_input_metrics, input_dict)\n        else:\n \
+          \           continue\n\n"
+        image: python:3.10-slim
+    exec-run-xgboost-katib-experiment:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - run_xgboost_katib_experiment
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.9.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'kubeflow-katib==0.17.0'\
+          \ && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef run_xgboost_katib_experiment(\n    time_str: str, \n    input_params_metrics:\
+          \ Input[Metrics], \n    best_params_metrics: Output[Metrics]\n):\n    from\
+          \ kubeflow.katib import KatibClient\n    from kubernetes.client import V1ObjectMeta\n\
+          \    from kubeflow.katib import V1beta1Experiment\n    from kubeflow.katib\
+          \ import V1beta1AlgorithmSpec\n    from kubeflow.katib import V1beta1ObjectiveSpec\n\
+          \    from kubeflow.katib import V1beta1FeasibleSpace\n    from kubeflow.katib\
+          \ import V1beta1ExperimentSpec\n    from kubeflow.katib import V1beta1ObjectiveSpec\n\
+          \    from kubeflow.katib import V1beta1ParameterSpec\n    from kubeflow.katib\
+          \ import V1beta1TrialTemplate\n    from kubeflow.katib import V1beta1TrialParameterSpec\n\
+          \n    experiment_name = \"xgboost-\" + time_str.replace(\"_\", \"-\")\n\
+          \    experiment_namespace = input_params_metrics.metadata.get(\"experiment_namespace\"\
+          )\n\n    if experiment_name is None or experiment_namespace is None:\n \
+          \       raise ValueError(\"Both experiment_name and experiment namespace\
+          \ needs to be a string!\")\n\n    metadata = V1ObjectMeta(\n        name=experiment_name,\
+          \ \n        namespace=experiment_namespace\n    )\n\n    algorithm_spec\
+          \ = V1beta1AlgorithmSpec(\n        algorithm_name=\"random\"\n    )\n\n\
+          \    objective_spec = V1beta1ObjectiveSpec(\n        type=\"maximize\",\n\
+          \        goal= 0.99,\n        objective_metric_name=\"accuracy\",\n    )\n\
+          \n    learning_rate_min = input_params_metrics.metadata.get(\"learning_rate_min\"\
+          )\n    learning_rate_max = input_params_metrics.metadata.get(\"learning_rate_max\"\
+          )\n    learning_rate_step = input_params_metrics.metadata.get(\"learning_rate_step\"\
+          )\n\n    if learning_rate_min is None or learning_rate_max is None or learning_rate_step\
+          \ is None:\n        raise ValueError(\"All learning_rate_min, learning_rate_max\
+          \ and learning_rate_step cannot be null!\")\n\n    try:\n        learning_rate_min\
+          \ = float(learning_rate_min)\n        learning_rate_max = float(learning_rate_max)\n\
+          \        learning_rate_step = float(learning_rate_step)\n    except ValueError:\n\
+          \        raise ValueError(\"All learning_rate_min, learning_rate_max and\
+          \ learning_rate_step needs to be a float!\")\n\n    n_estimators_min = input_params_metrics.metadata.get(\"\
+          n_estimators_min\")\n    n_estimators_max = input_params_metrics.metadata.get(\"\
+          n_estimators_max\")\n    n_estimators_step = input_params_metrics.metadata.get(\"\
+          n_estimators_step\")\n\n    if n_estimators_min is None or n_estimators_max\
+          \ is None or n_estimators_step is None:\n        raise ValueError(\"All\
+          \ n_estimators_min, n_estimators_max and n_estimators_step cannot be null!\"\
+          )\n\n    try:\n        n_estimators_min = int(n_estimators_min)\n      \
+          \  n_estimators_max = int(n_estimators_max)\n        n_estimators_step =\
+          \ int(n_estimators_step)\n    except ValueError:\n        raise ValueError(\"\
+          All n_estimators_min, n_estimators_max and n_estimators_step needs to be\
+          \ a float!\")\n\n    parameters = [\n        V1beta1ParameterSpec(\n   \
+          \         name=\"lr\",\n            parameter_type=\"double\",\n       \
+          \     feasible_space=V1beta1FeasibleSpace(\n                min=str(learning_rate_min),\n\
+          \                max=str(learning_rate_max), \n                step=str(learning_rate_step)\n\
+          \            ),\n        ), \n        V1beta1ParameterSpec(\n          \
+          \  name=\"ne\",\n            parameter_type=\"int\",\n            feasible_space=V1beta1FeasibleSpace(\n\
+          \                min=str(n_estimators_min),\n                max=str(n_estimators_max),\
+          \ \n                step=str(n_estimators_step)\n            ),\n      \
+          \  )\n    ]\n\n    docker_image_name = input_params_metrics.metadata.get(\"\
+          docker_image_name\")\n    if docker_image_name is None:\n        raise ValueError(\"\
+          Docker image name cannot be null!\")\n\n    random_state = input_params_metrics.metadata.get(\"\
+          random_state\")\n    if random_state is None:\n        random_state = 42\n\
+          \    else:\n        try:\n            random_state = int(random_state)\n\
+          \        except ValueError:\n            raise ValueError(\"Random state\
+          \ needs to be an int!\")\n\n    x_train_path = input_params_metrics.metadata.get(\"\
+          x_train_path\")\n    x_test_path = input_params_metrics.metadata.get(\"\
+          x_test_path\")\n    y_train_path = input_params_metrics.metadata.get(\"\
+          y_train_path\")\n    y_test_path = input_params_metrics.metadata.get(\"\
+          y_test_path\")\n\n    train_container = {\n        \"name\": \"training-container\"\
+          ,\n        \"image\": f\"docker.io/{docker_image_name}\",\n        \"command\"\
+          : [\n            \"python3\",\n            \"/opt/xgboost/train.py\",\n\
+          \            \"--lr=${trialParameters.learningRate}\",\n            \"--ne=${trialParameters.nEstimators}\"\
+          ,\n            f\"--rs={random_state}\",\n            f\"--esp=100000\"\
+          ,\n            f\"--booster=gbtree\",\n            f\"--x_train_path={x_train_path}\"\
+          ,\n            f\"--x_test_path={x_test_path}\",\n            f\"--y_train_path={y_train_path}\"\
+          ,\n            f\"--y_test_path={y_test_path}\",\n            f\"--save_model=false\"\
+          ,\n            f\"--model_folder_path=models\"\n        ]\n    }\n\n   \
+          \ template_spec = {\n        \"containers\": [\n            train_container\n\
+          \        ],\n        \"restartPolicy\": \"Never\"\n    }\n\n    volumes\
+          \ = []\n    volumeMounts = []\n\n    datasets_from_pvc = input_params_metrics.metadata.get(\"\
+          datasets_from_pvc\")\n    datasets_pvc_name = input_params_metrics.metadata.get(\"\
+          datasets_pvc_name\")\n    datasets_pvc_mount_path = input_params_metrics.metadata.get(\"\
+          datasets_pvc_mount_path\")\n\n    if datasets_from_pvc is True:\n      \
+          \  if datasets_pvc_name is None or datasets_pvc_mount_path is None:\n  \
+          \          raise ValueError(\"Both datasets_pvc_name and datasets_pvc_mount_path\
+          \ cannot be null\")\n\n        volumes.append({\n            \"name\": \"\
+          datasets\", \n            \"persistentVolumeClaim\": {\n               \
+          \ \"claimName\": datasets_pvc_name\n            }\n        })\n        volumeMounts.append({\n\
+          \            \"name\": \"datasets\", \n            \"mountPath\": datasets_pvc_mount_path\n\
+          \        })\n\n    '''\n    if save_model is True:\n        volumes.append({\n\
+          \            \"name\": \"models\", \n            \"persistentVolumeClaim\"\
+          : {\n                \"claimName\": models_pvc_name\n            }\n   \
+          \     })\n        volumeMounts.append({\n            \"name\": \"models\"\
+          , \n            \"mountPath\": \"/opt/xgboost/models\"\n        })\n\n \
+          \   if datasets_from_pvc is True or save_model is True:\n        train_container[\"\
+          volumeMounts\"] = volumeMounts\n        template_spec[\"volumes\"] = volumes\n\
+          \    '''\n\n\n    trial_spec={\n        \"apiVersion\": \"batch/v1\",\n\
+          \        \"kind\": \"Job\",\n        \"spec\": {\n            \"template\"\
+          : {\n                \"metadata\": {\n                    \"annotations\"\
+          : {\n                        \"sidecar.istio.io/inject\": \"false\"\n  \
+          \                  }\n                },\n                \"spec\": template_spec\n\
+          \            }\n        }\n    }\n\n    trial_template=V1beta1TrialTemplate(\n\
+          \        primary_container_name=\"training-container\",\n        trial_parameters=[\n\
+          \            V1beta1TrialParameterSpec(\n                name=\"learningRate\"\
+          ,\n                description=\"Learning rate for the training model\"\
+          ,\n                reference=\"lr\"\n            ), \n            V1beta1TrialParameterSpec(\n\
+          \                name=\"nEstimators\",\n                description=\"N\
+          \ estimators for the training model\",\n                reference=\"ne\"\
+          \n            )\n        ],\n        trial_spec=trial_spec,\n        retain=True\n\
+          \    )\n\n    max_trial_counts = input_params_metrics.metadata.get(\"max_trial_counts\"\
+          )\n    max_failed_trial_counts = input_params_metrics.metadata.get(\"max_failed_trial_counts\"\
+          )\n    parallel_trial_counts = input_params_metrics.metadata.get(\"parallel_trial_counts\"\
+          )\n\n    if max_failed_trial_counts is None or max_failed_trial_counts is\
+          \ None or parallel_trial_counts is None:\n        raise ValueError(\"All\
+          \ max_trial_counts, max_failed_trial_counts and parallel_trial_counts cannot\
+          \ be null!\")\n\n    try:\n        max_trial_counts = int(max_trial_counts)\n\
+          \        max_failed_trial_counts = int(max_failed_trial_counts)\n      \
+          \  parallel_trial_counts = int(parallel_trial_counts)\n    except ValueError:\n\
+          \        raise ValueError(\"All max_trial_counts, max_failed_trial_counts\
+          \ and needs to be an int!\")\n\n    experiment = V1beta1Experiment(\n  \
+          \      api_version=\"kubeflow.org/v1beta1\",\n        kind=\"Experiment\"\
+          ,\n        metadata=metadata,\n        spec=V1beta1ExperimentSpec(\n   \
+          \         max_trial_count=max_trial_counts,\n            parallel_trial_count=parallel_trial_counts,\n\
+          \            max_failed_trial_count=max_failed_trial_counts,\n         \
+          \   algorithm=algorithm_spec,\n            objective=objective_spec,\n \
+          \           parameters=parameters,\n            trial_template=trial_template,\n\
+          \        )\n    )\n\n    client_namespace = input_params_metrics.metadata.get(\"\
+          client_namespace\")\n    if client_namespace is None:\n        raise ValueError(\"\
+          Client namespace cannot be null!\")\n\n    client = KatibClient(namespace=client_namespace)\n\
+          \    client.create_experiment(experiment=experiment)\n    client.wait_for_experiment_condition(name=experiment_name,\
+          \ namespace=experiment_namespace, timeout=3600)\n\n    result = client.get_optimal_hyperparameters(name=experiment_name,\
+          \ namespace=experiment_namespace).to_dict()\n\n    best_params_list = result[\"\
+          parameter_assignments\"]\n\n    for params in best_params_list:\n      \
+          \  name = params[\"name\"]\n        value = params[\"value\"]\n        best_params_metrics.log_metric(metric=name,\
+          \ value=value)\n\n"
+        image: python:3.10-slim
+pipelineInfo:
+  description: Compose of kubeflow, katib and spark
+  name: compose
+root:
+  dag:
+    outputs:
+      artifacts:
+        parse-input-json-random_forest_input_metrics:
+          artifactSelectors:
+          - outputArtifactKey: random_forest_input_metrics
+            producerSubtask: parse-input-json
+        parse-input-json-xgboost_input_metrics:
+          artifactSelectors:
+          - outputArtifactKey: xgboost_input_metrics
+            producerSubtask: parse-input-json
+        run-xgboost-katib-experiment-best_params_metrics:
+          artifactSelectors:
+          - outputArtifactKey: best_params_metrics
+            producerSubtask: run-xgboost-katib-experiment
+    tasks:
+      get-time-str:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-get-time-str
+        taskInfo:
+          name: get-time-str
+      parse-input-json:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-parse-input-json
+        inputs:
+          parameters:
+            json_file_path:
+              componentInputParameter: params_json_file_path
+        taskInfo:
+          name: parse-input-json
+      run-xgboost-katib-experiment:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-run-xgboost-katib-experiment
+        dependentTasks:
+        - get-time-str
+        - parse-input-json
+        inputs:
+          artifacts:
+            input_params_metrics:
+              taskOutputArtifact:
+                outputArtifactKey: xgboost_input_metrics
+                producerTask: parse-input-json
+          parameters:
+            time_str:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: get-time-str
+        taskInfo:
+          name: run-xgboost-katib-experiment
+  inputDefinitions:
+    parameters:
+      params_json_file_path:
+        defaultValue: /mnt/params/params.json
+        isOptional: true
+        parameterType: STRING
+      params_mount_path:
+        defaultValue: /mnt/params
+        isOptional: true
+        parameterType: STRING
+      params_pvc_name:
+        defaultValue: params-pvc
+        isOptional: true
+        parameterType: STRING
+  outputDefinitions:
+    artifacts:
+      parse-input-json-random_forest_input_metrics:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+      parse-input-json-xgboost_input_metrics:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+      run-xgboost-katib-experiment-best_params_metrics:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.9.0
+---
+platforms:
+  kubernetes:
+    deploymentSpec:
+      executors:
+        exec-parse-input-json:
+          pvcMount:
+          - constant: '{{channel:task=;name=params_pvc_name;type=String;}}'
+            mountPath: '{{channel:task=;name=params_mount_path;type=String;}}'

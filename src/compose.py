@@ -1,5 +1,12 @@
-from kfp import dsl, compiler
+from kfp import dsl, compiler, kubernetes
 from kfp.dsl import Input, Output, Metrics, component
+
+
+@component(base_image='python:3.10-slim')
+def get_time_str() -> str:
+    from datetime import datetime, timezone, timedelta
+
+    return datetime.now(timezone(timedelta(hours=8))).strftime("%-Y-%m-%d-%H-%M-%S")
 
 
 @component(base_image='python:3.10-slim')
@@ -33,6 +40,7 @@ def parse_input_json(
     ]
 )
 def run_xgboost_katib_experiment(
+    time_str: str, 
     input_params_metrics: Input[Metrics], 
     best_params_metrics: Output[Metrics]
 ):
@@ -48,7 +56,7 @@ def run_xgboost_katib_experiment(
     from kubeflow.katib import V1beta1TrialTemplate
     from kubeflow.katib import V1beta1TrialParameterSpec
 
-    experiment_name = input_params_metrics.metadata.get("experiment_name")
+    experiment_name = "xgboost-" + time_str.replace("_", "-")
     experiment_namespace = input_params_metrics.metadata.get("experiment_namespace")
 
     if experiment_name is None or experiment_namespace is None:
@@ -171,6 +179,9 @@ def run_xgboost_katib_experiment(
     datasets_pvc_mount_path = input_params_metrics.metadata.get("datasets_pvc_mount_path")
     
     if datasets_from_pvc is True:
+        if datasets_pvc_name is None or datasets_pvc_mount_path is None:
+            raise ValueError("Both datasets_pvc_name and datasets_pvc_mount_path cannot be null")
+
         volumes.append({
             "name": "datasets", 
             "persistentVolumeClaim": {
@@ -182,6 +193,7 @@ def run_xgboost_katib_experiment(
             "mountPath": datasets_pvc_mount_path
         })
 
+    '''
     if save_model is True:
         volumes.append({
             "name": "models", 
@@ -197,6 +209,7 @@ def run_xgboost_katib_experiment(
     if datasets_from_pvc is True or save_model is True:
         train_container["volumeMounts"] = volumeMounts
         template_spec["volumes"] = volumes
+    '''
 
 
     trial_spec={
@@ -213,8 +226,6 @@ def run_xgboost_katib_experiment(
             }
         }
     }
-
-
 
     trial_template=V1beta1TrialTemplate(
         primary_container_name="training-container",
@@ -279,3 +290,32 @@ def run_xgboost_katib_experiment(
         name = params["name"]
         value = params["value"]
         best_params_metrics.log_metric(metric=name, value=value)
+
+@dsl.pipeline(
+    name="compose", 
+    description="Compose of kubeflow, katib and spark"
+)
+def compose_pipeline(
+    params_pvc_name: str = "params-pvc", 
+    params_mount_path: str = "/mnt/params", 
+    params_json_file_path: str = "/mnt/params/params.json"
+):
+    get_time_str_task = get_time_str()
+
+    parse_input_json_task = parse_input_json(
+        json_file_path=params_json_file_path
+    )
+
+    kubernetes.mount_pvc(
+        task=parse_input_json_task, 
+        pvc_name=str(params_pvc_name), 
+        mount_path=str(params_mount_path)
+    )
+
+    run_xgboost_katib_experiment(
+        time_str=get_time_str_task.output, 
+        input_params_metrics=parse_input_json_task.outputs["xgboost_input_metrics"]
+    )
+
+if __name__ == "__main__":
+    compiler.Compiler().compile(compose_pipeline, "compose_pipeline.yaml")
