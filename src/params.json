@@ -61,5 +61,25 @@
         "parallel_trial_counts": 1, 
         "experiment_namespace": "kubeflow-user-example-com", 
         "client_namespace": "kubeflow-user-example-com"
+    }, 
+    {
+        "method": "lr", 
+        "docker_image_name": "killer66562/lr-trainer-heart-disease:latest", 
+        "iterators_min": 1, 
+        "iterators_max": 500, 
+        "iterators_step": 1, 
+        "random_state": 0, 
+        "x_train_path": "/opt/lr/datasets/x_train.csv", 
+        "x_test_path": "/opt/lr/datasets/x_test.csv", 
+        "y_train_path": "/opt/lr/datasets/y_train.csv", 
+        "y_test_path": "/opt/lr/datasets/y_test.csv", 
+        "datasets_from_pvc": false, 
+        "datasets_pvc_name": "datasets", 
+        "datasets_pvc_mount_path": "/opt/lr/datasets", 
+        "max_trial_counts": 10, 
+        "max_failed_trial_counts": 5, 
+        "parallel_trial_counts": 1, 
+        "experiment_namespace": "kubeflow-user-example-com", 
+        "client_namespace": "kubeflow-user-example-com"
     }
 ]
