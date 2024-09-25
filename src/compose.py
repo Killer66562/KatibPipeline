@@ -35,7 +35,8 @@ def parse_input_json(
     json_file_path: str, 
     xgboost_input_metrics: Output[Metrics], 
     random_forest_input_metrics: Output[Metrics], 
-    knn_input_metrics: Output[Metrics]
+    knn_input_metrics: Output[Metrics],
+    lr_input_metrics: Output[Metrics]
 ):
     import json
 
@@ -56,6 +57,8 @@ def parse_input_json(
             log_metric(random_forest_input_metrics, input_dict)
         elif input_dict["method"] == "knn":
             log_metric(knn_input_metrics, input_dict)
+        elif input_dict["method"] == "lr":
+            log_metric(lr_input_metrics, input_dict)
         else:
             continue
 
@@ -817,6 +820,250 @@ def run_knn_katib_experiment(
             
         best_params_metrics.log_metric(metric=name, value=value)
 
+'''
+==================================
+This is for seperating the code.
+Don't remove it.
+Thx!
+
+Logistic Regression katib below.
+==================================
+'''
+
+#Logistic Regression_katib
+@dsl.component(
+    base_image='python:3.10-slim', 
+    packages_to_install=[
+        'kubeflow-katib==0.17.0'
+    ]
+)
+def run_lr_katib_experiment(
+    input_params_metrics: Input[Metrics], 
+    best_params_metrics: Output[Metrics]
+):
+    from kubeflow.katib import KatibClient
+    from kubernetes.client import V1ObjectMeta
+    from kubeflow.katib import V1beta1Experiment
+    from kubeflow.katib import V1beta1AlgorithmSpec
+    from kubeflow.katib import V1beta1ObjectiveSpec
+    from kubeflow.katib import V1beta1FeasibleSpace
+    from kubeflow.katib import V1beta1ExperimentSpec
+    from kubeflow.katib import V1beta1ObjectiveSpec
+    from kubeflow.katib import V1beta1ParameterSpec
+    from kubeflow.katib import V1beta1TrialTemplate
+    from kubeflow.katib import V1beta1TrialParameterSpec
+
+    from datetime import datetime, timezone, timedelta
+
+    dt_str = datetime.now(timezone(timedelta(hours=8))).strftime("%-Y-%m-%d-%H-%M-%S")
+
+    experiment_name = "lr-" + dt_str.replace("_", "-")
+    experiment_namespace = input_params_metrics.metadata.get("experiment_namespace")
+
+    if experiment_name is None or experiment_namespace is None:
+        raise ValueError("Both experiment_name and experiment namespace needs to be a string!")
+
+    metadata = V1ObjectMeta(
+        name=experiment_name, 
+        namespace=experiment_namespace
+    )
+
+    algorithm_spec = V1beta1AlgorithmSpec(
+        algorithm_name="random"
+    )
+
+    objective_spec = V1beta1ObjectiveSpec(
+        type="maximize",
+        goal= 0.99,
+        objective_metric_name="accuracy",
+    )
+
+    iterators_min = input_params_metrics.metadata.get("iterators_min")
+    iterators_max = input_params_metrics.metadata.get("iterators_max")
+    iterators_step = input_params_metrics.metadata.get("iterators_step")
+
+    if iterators_min is None or iterators_max is None or iterators_step is None:
+        raise ValueError("All iterators_min, iterators_max and iterators_step cannot be null!")
+
+    try:
+        iterators_min = int(iterators_min)
+        iterators_max = int(iterators_max)
+        iterators_step = int(iterators_step)
+    except ValueError:
+        raise ValueError("All iterators_min, iterators_max and iterators_step needs to be a int!")
+
+    parameters = [
+        V1beta1ParameterSpec(
+            name="it",
+            parameter_type="int",
+            feasible_space=V1beta1FeasibleSpace(
+                min=str(iterators_min),
+                max=str(iterators_max), 
+                step=str(iterators_step)
+            )
+        )
+    ]
+
+    docker_image_name = input_params_metrics.metadata.get("docker_image_name")
+    if docker_image_name is None:
+        raise ValueError("Docker image name cannot be null!")
+
+    random_state = input_params_metrics.metadata.get("random_state")
+    if random_state is None:
+        random_state = 42
+    else:
+        try:
+            random_state = int(random_state)
+        except ValueError:
+            raise ValueError("Random state needs to be an int!")
+        
+    x_train_path = input_params_metrics.metadata.get("x_train_path")
+    x_test_path = input_params_metrics.metadata.get("x_test_path")
+    y_train_path = input_params_metrics.metadata.get("y_train_path")
+    y_test_path = input_params_metrics.metadata.get("y_test_path")
+
+    train_container = {
+        "name": "training-container",
+        "image": f"docker.io/{docker_image_name}",
+        "command": [
+            "python3",
+            "/opt/knn/train.py",
+            "--lr=${trialParameters.iterators}",
+            f"--rs={random_state}",
+            f"--x_train_path={x_train_path}",
+            f"--x_test_path={x_test_path}",
+            f"--y_train_path={y_train_path}",
+            f"--y_test_path={y_test_path}",
+            f"--save_model=false",
+            f"--model_folder_path=models"
+        ]
+    }
+
+    template_spec = {
+        "containers": [
+            train_container
+        ],
+        "restartPolicy": "Never"
+    }
+
+    volumes = []
+    volumeMounts = []
+
+    datasets_from_pvc = input_params_metrics.metadata.get("datasets_from_pvc")
+    datasets_pvc_name = input_params_metrics.metadata.get("datasets_pvc_name")
+    datasets_pvc_mount_path = input_params_metrics.metadata.get("datasets_pvc_mount_path")
+    
+    if datasets_from_pvc is True:
+        if datasets_pvc_name is None or datasets_pvc_mount_path is None:
+            raise ValueError("Both datasets_pvc_name and datasets_pvc_mount_path cannot be null")
+
+        volumes.append({
+            "name": "datasets", 
+            "persistentVolumeClaim": {
+                "claimName": datasets_pvc_name
+            }
+        })
+        volumeMounts.append({
+            "name": "datasets", 
+            "mountPath": datasets_pvc_mount_path
+        })
+
+    '''
+    if save_model is True:
+        volumes.append({
+            "name": "models", 
+            "persistentVolumeClaim": {
+                "claimName": models_pvc_name
+            }
+        })
+        volumeMounts.append({
+            "name": "models", 
+            "mountPath": "/opt/rfc/models"
+        })
+
+    if datasets_from_pvc is True or save_model is True:
+        train_container["volumeMounts"] = volumeMounts
+        template_spec["volumes"] = volumes
+    '''
+
+    trial_spec={
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "spec": {
+            "template": {
+                "metadata": {
+                    "annotations": {
+                        "sidecar.istio.io/inject": "false"
+                    }
+                },
+                "spec": template_spec
+            }
+        }
+    }
+
+    trial_template=V1beta1TrialTemplate(
+        primary_container_name="training-container",
+        trial_parameters=[
+            V1beta1TrialParameterSpec(
+                name="iterators",
+                description="iterators for the training model",
+                reference="it"
+            )
+        ],
+        trial_spec=trial_spec,
+        retain=True
+    )
+
+    max_trial_counts = input_params_metrics.metadata.get("max_trial_counts")
+    max_failed_trial_counts = input_params_metrics.metadata.get("max_failed_trial_counts")
+    parallel_trial_counts = input_params_metrics.metadata.get("parallel_trial_counts")
+
+    if max_failed_trial_counts is None or max_failed_trial_counts is None or parallel_trial_counts is None:
+        raise ValueError("All max_trial_counts, max_failed_trial_counts and parallel_trial_counts cannot be null!")
+    
+    try:
+        max_trial_counts = int(max_trial_counts)
+        max_failed_trial_counts = int(max_failed_trial_counts)
+        parallel_trial_counts = int(parallel_trial_counts)
+    except ValueError:
+        raise ValueError("All max_trial_counts, max_failed_trial_counts and needs to be an int!")
+
+    experiment = V1beta1Experiment(
+        api_version="kubeflow.org/v1beta1",
+        kind="Experiment",
+        metadata=metadata,
+        spec=V1beta1ExperimentSpec(
+            max_trial_count=max_trial_counts,
+            parallel_trial_count=parallel_trial_counts,
+            max_failed_trial_count=max_failed_trial_counts,
+            algorithm=algorithm_spec,
+            objective=objective_spec,
+            parameters=parameters,
+            trial_template=trial_template,
+        )
+    )
+
+    client_namespace = input_params_metrics.metadata.get("client_namespace")
+    if client_namespace is None:
+        raise ValueError("Client namespace cannot be null!")
+
+    client = KatibClient(namespace=client_namespace)
+    client.create_experiment(experiment=experiment)
+    client.wait_for_experiment_condition(name=experiment_name, namespace=experiment_namespace, timeout=3600)
+
+    result = client.get_optimal_hyperparameters(name=experiment_name, namespace=experiment_namespace).to_dict()
+
+    best_params_list = result["parameter_assignments"]
+
+    for params in best_params_list:
+        name = params["name"]
+        value = params["value"]
+
+        if name == "it":
+            value = int(value)
+            
+        best_params_metrics.log_metric(metric=name, value=value)
+
 @dsl.component(
     base_image='python:3.10-slim', 
     packages_to_install=['pandas', 'xgboost', 'scikit-learn', 'joblib']
@@ -973,6 +1220,52 @@ def run_knn_train(
     with open(file=file.path, mode='w', encoding='utf8') as file:
         json.dump(data, file, indent=4)
 
+@dsl.component(
+    base_image='python:3.10-slim', 
+    packages_to_install=['pandas', 'scikit-learn', 'joblib']
+)
+def run_lr_train(
+    best_params_metrics: Input[Metrics], 
+    x_train: Input[Dataset], 
+    x_test: Input[Dataset], 
+    y_train: Input[Dataset], 
+    y_test: Input[Dataset], 
+    model: Output[Model], 
+    file: Output[Artifact]
+):
+    import pandas as pd
+    import joblib
+    import json
+
+    from sklearn.metrics import accuracy_score
+    from sklearn.linear_model import LogisticRegression
+
+    iterators = best_params_metrics.metadata.get("it")
+
+    x_train_df = pd.read_csv(x_train.path)
+    y_train_df = pd.read_csv(y_train.path)
+    x_test_df = pd.read_csv(x_test.path)
+    y_test_df = pd.read_csv(y_test.path)
+
+    lr_model = LogisticRegression(
+        random_state=0, 
+        max_iter=iterators
+    )
+    lr_model.fit(x_train_df.values, y_train_df.values.ravel())
+
+    y_pred = lr_model.predict(x_test_df.values)
+    accuracy = accuracy_score(y_test_df.values, y_pred)
+
+    # Save the model
+    joblib.dump(model, model.path)
+
+    data = {}
+    data['accuracy'] = accuracy
+    data['model_path'] = model.path
+
+    with open(file=file.path, mode='w', encoding='utf8') as file:
+        json.dump(data, file, indent=4)
+
 @dsl.pipeline(
     name="compose", 
     description="Compose of kubeflow, katib and spark"
@@ -1015,6 +1308,10 @@ def compose_pipeline(
     knn_katib_experiment_task = run_knn_katib_experiment(
         input_params_metrics=parse_input_json_task.outputs["knn_input_metrics"]
     )
+    
+    lr_katib_experiment_task = run_lr_katib_experiment(
+        input_params_metrics=parse_input_json_task.outputs["lr_input_metrics"]
+    )
 
     xgboost_train_task = run_xgboost_train(
         best_params_metrics=xgboost_katib_experiment_task.outputs['best_params_metrics'], 
@@ -1040,5 +1337,13 @@ def compose_pipeline(
         y_test=load_datasets_task.outputs['y_test_output']
     )
 
+    lr_train_task = run_lr_train(
+        best_params_metrics=lr_katib_experiment_task.outputs['best_params_metrics'], 
+        x_train=load_datasets_task.outputs['x_train_output'], 
+        x_test=load_datasets_task.outputs['x_test_output'], 
+        y_train=load_datasets_task.outputs['y_train_output'], 
+        y_test=load_datasets_task.outputs['y_test_output']
+    )
+
 if __name__ == "__main__":
-    compiler.Compiler().compile(compose_pipeline, "compose_pipeline.yaml")
+    compiler.Compiler().compile(compose_pipeline, "../compose_pipeline.yaml")
