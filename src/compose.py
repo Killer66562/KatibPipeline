@@ -927,7 +927,7 @@ def run_lr_katib_experiment(
         "image": f"docker.io/{docker_image_name}",
         "command": [
             "python3",
-            "/opt/knn/train.py",
+            "/opt/lr/train.py",
             "--lr=${trialParameters.iterators}",
             f"--rs={random_state}",
             f"--x_train_path={x_train_path}",
@@ -978,7 +978,7 @@ def run_lr_katib_experiment(
         })
         volumeMounts.append({
             "name": "models", 
-            "mountPath": "/opt/rfc/models"
+            "mountPath": "/opt/lr/models"
         })
 
     if datasets_from_pvc is True or save_model is True:
@@ -1308,7 +1308,7 @@ def compose_pipeline(
     knn_katib_experiment_task = run_knn_katib_experiment(
         input_params_metrics=parse_input_json_task.outputs["knn_input_metrics"]
     )
-    
+
     lr_katib_experiment_task = run_lr_katib_experiment(
         input_params_metrics=parse_input_json_task.outputs["lr_input_metrics"]
     )
