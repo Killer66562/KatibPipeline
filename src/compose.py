@@ -928,7 +928,7 @@ def run_lr_katib_experiment(
         "command": [
             "python3",
             "/opt/lr/train.py",
-            "--lr=${trialParameters.iterators}",
+            "--it=${trialParameters.iterators}",
             f"--rs={random_state}",
             f"--x_train_path={x_train_path}",
             f"--x_test_path={x_test_path}",

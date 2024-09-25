@@ -595,7 +595,7 @@ deploymentSpec:
           y_test_path\")\n\n    train_container = {\n        \"name\": \"training-container\"\
           ,\n        \"image\": f\"docker.io/{docker_image_name}\",\n        \"command\"\
           : [\n            \"python3\",\n            \"/opt/lr/train.py\",\n     \
-          \       \"--lr=${trialParameters.iterators}\",\n            f\"--rs={random_state}\"\
+          \       \"--it=${trialParameters.iterators}\",\n            f\"--rs={random_state}\"\
           ,\n            f\"--x_train_path={x_train_path}\",\n            f\"--x_test_path={x_test_path}\"\
           ,\n            f\"--y_train_path={y_train_path}\",\n            f\"--y_test_path={y_test_path}\"\
           ,\n            f\"--save_model=false\",\n            f\"--model_folder_path=models\"\
