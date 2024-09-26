@@ -1,5 +1,5 @@
 from kfp import dsl, compiler, kubernetes
-from kfp.dsl import Input, Output, Metrics, Dataset, Model, Artifact, component, ContainerSpec
+from kfp.dsl import Input, Output, Metrics, Dataset, Model, Artifact, component, ContainerSpec,  OutputPath, InputPath
 
 
 @component(
@@ -210,6 +210,8 @@ def run_xgboost_katib_experiment(
     datasets_from_pvc = input_params_metrics.metadata.get("datasets_from_pvc")
     datasets_pvc_name = input_params_metrics.metadata.get("datasets_pvc_name")
     datasets_pvc_mount_path = input_params_metrics.metadata.get("datasets_pvc_mount_path")
+
+    datasets_from_pvc = bool(datasets_from_pvc)
     
     if datasets_from_pvc is True:
         if datasets_pvc_name is None or datasets_pvc_mount_path is None:
@@ -243,6 +245,9 @@ def run_xgboost_katib_experiment(
         train_container["volumeMounts"] = volumeMounts
         template_spec["volumes"] = volumes
     '''
+    if datasets_from_pvc is True:
+        train_container["volumeMounts"] = volumeMounts
+        template_spec["volumes"] = volumes
 
     trial_spec={
         "apiVersion": "batch/v1",
@@ -461,6 +466,8 @@ def run_random_forest_katib_experiment(
     datasets_from_pvc = input_params_metrics.metadata.get("datasets_from_pvc")
     datasets_pvc_name = input_params_metrics.metadata.get("datasets_pvc_name")
     datasets_pvc_mount_path = input_params_metrics.metadata.get("datasets_pvc_mount_path")
+
+    datasets_from_pvc = bool(datasets_from_pvc)
     
     if datasets_from_pvc is True:
         if datasets_pvc_name is None or datasets_pvc_mount_path is None:
@@ -494,6 +501,9 @@ def run_random_forest_katib_experiment(
         train_container["volumeMounts"] = volumeMounts
         template_spec["volumes"] = volumes
     '''
+    if datasets_from_pvc is True:
+        train_container["volumeMounts"] = volumeMounts
+        template_spec["volumes"] = volumes
 
     trial_spec={
         "apiVersion": "batch/v1",
@@ -708,6 +718,8 @@ def run_knn_katib_experiment(
     datasets_from_pvc = input_params_metrics.metadata.get("datasets_from_pvc")
     datasets_pvc_name = input_params_metrics.metadata.get("datasets_pvc_name")
     datasets_pvc_mount_path = input_params_metrics.metadata.get("datasets_pvc_mount_path")
+
+    datasets_from_pvc = bool(datasets_from_pvc)
     
     if datasets_from_pvc is True:
         if datasets_pvc_name is None or datasets_pvc_mount_path is None:
@@ -741,6 +753,9 @@ def run_knn_katib_experiment(
         train_container["volumeMounts"] = volumeMounts
         template_spec["volumes"] = volumes
     '''
+    if datasets_from_pvc is True:
+        train_container["volumeMounts"] = volumeMounts
+        template_spec["volumes"] = volumes
 
     trial_spec={
         "apiVersion": "batch/v1",
@@ -952,6 +967,8 @@ def run_lr_katib_experiment(
     datasets_from_pvc = input_params_metrics.metadata.get("datasets_from_pvc")
     datasets_pvc_name = input_params_metrics.metadata.get("datasets_pvc_name")
     datasets_pvc_mount_path = input_params_metrics.metadata.get("datasets_pvc_mount_path")
+
+    datasets_from_pvc = bool(datasets_from_pvc)
     
     if datasets_from_pvc is True:
         if datasets_pvc_name is None or datasets_pvc_mount_path is None:
@@ -980,11 +997,11 @@ def run_lr_katib_experiment(
             "name": "models", 
             "mountPath": "/opt/lr/models"
         })
+    '''
 
-    if datasets_from_pvc is True or save_model is True:
+    if datasets_from_pvc is True:
         train_container["volumeMounts"] = volumeMounts
         template_spec["volumes"] = volumes
-    '''
 
     trial_spec={
         "apiVersion": "batch/v1",
@@ -1266,6 +1283,61 @@ def run_lr_train(
     with open(file=file.path, mode='w', encoding='utf8') as file:
         json.dump(data, file, indent=4)
 
+@dsl.component(
+    base_image='python:3.9',
+    packages_to_install=['joblib==1.4.2', 'scikit-learn==1.5.1', 'xgboost==2.0.3']# 
+)
+def choose_model(
+    LogisticRegression_model: Input[Model],
+    XGBoost_model: Input[Model],
+    RandomForest_model: Input[Model],
+    KNN_model: Input[Model],
+    lr_file: Input[Artifact],
+    xgb_file: Input[Artifact],
+    rf_file: Input[Artifact],
+    knn_file: Input[Artifact],
+    final_model: Output[Model],
+    result: Output[Artifact]
+) -> None:
+    import joblib
+    import json
+
+    # Define a dictionary to store model artifacts and their corresponding JSON files
+    models = {
+        'LogisticRegression': lr_file,
+        'XGBoost': xgb_file,
+        'RandomForest': rf_file,
+        'KNN': knn_file
+    }
+
+    accuracy = {}
+    model_paths = {}
+
+    # Read accuracies and model paths
+    for model_name, json_file in models.items():
+        with open(json_file.path, 'r') as f:
+            data = json.load(f)
+        accuracy[model_name] = data['accuracy']
+        model_paths[model_name] = data['model_path']
+
+    # Find the best model
+    best_model_name = max(accuracy, key=accuracy.get)
+    best_model = joblib.load(model_paths[best_model_name])
+    
+    # Save the best model
+    joblib.dump(best_model, final_model.path)
+
+    # Prepare result string
+    result_string = f'Best Model is {best_model_name} : {accuracy[best_model_name]}'
+    result_string += f'\nAccuracy:\n'
+    for model_name, acc in accuracy.items():
+        result_string += f'{model_name:17} : {acc}\n'
+    print(result_string)
+
+    # Write the result to a file
+    with open(result.path, 'w') as f:
+        f.write(result_string)
+
 @dsl.pipeline(
     name="compose", 
     description="Compose of kubeflow, katib and spark"
@@ -1343,6 +1415,17 @@ def compose_pipeline(
         x_test=load_datasets_task.outputs['x_test_output'], 
         y_train=load_datasets_task.outputs['y_train_output'], 
         y_test=load_datasets_task.outputs['y_test_output']
+    )
+
+    choose_model_task = choose_model(
+        LogisticRegression_model=lr_train_task.outputs['model'],
+        XGBoost_model=xgboost_train_task.outputs['model'],
+        RandomForest_model=random_forest_train_task.outputs['model'],
+        KNN_model=knn_train_task.outputs['model'],
+        lr_file=lr_train_task.outputs['file'],
+        xgb_file=xgboost_train_task.outputs['file'],
+        rf_file=random_forest_train_task.outputs['file'],
+        knn_file=knn_train_task.outputs['file']
     )
 
 if __name__ == "__main__":
