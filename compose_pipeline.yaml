@@ -15,6 +15,14 @@
 #    run-random-forest-katib-experiment-best_params_metrics: system.Metrics
 #    run-xgboost-katib-experiment-best_params_metrics: system.Metrics
 components:
+  comp-apply-sparkapplication:
+    executorLabel: exec-apply-sparkapplication
+    inputDefinitions:
+      parameters:
+        name:
+          parameterType: STRING
+        object:
+          parameterType: STRING
   comp-change-model:
     executorLabel: exec-change-model
     inputDefinitions:
@@ -31,6 +39,14 @@ components:
         old_model_file_path:
           parameterType: STRING
         old_model_path:
+          parameterType: STRING
+  comp-check-sparkapplication-status:
+    executorLabel: exec-check-sparkapplication-status
+    inputDefinitions:
+      parameters:
+        name:
+          parameterType: STRING
+        namespace:
           parameterType: STRING
   comp-choose-model:
     executorLabel: exec-choose-model
@@ -78,6 +94,12 @@ components:
           artifactType:
             schemaTitle: system.Artifact
             schemaVersion: 0.0.1
+  comp-get-spark-driver-name:
+    executorLabel: exec-get-spark-driver-name
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
   comp-load-file-from-nas-to-minio:
     executorLabel: exec-load-file-from-nas-to-minio
     inputDefinitions:
@@ -326,6 +348,25 @@ components:
             schemaVersion: 0.0.1
 deploymentSpec:
   executors:
+    exec-apply-sparkapplication:
+      container:
+        command:
+        - bash
+        - -exc
+        - 'object_path=$0
+
+          echo "$object_path" > "SparkJob.yaml"
+
+          sed -i "s|spark-app-name|$1|g" SparkJob.yaml
+
+          cat SparkJob.yaml
+
+          kubectl apply -f SparkJob.yaml
+
+          '
+        - '{{$.inputs.parameters[''object'']}}'
+        - '{{$.inputs.parameters[''name'']}}'
+        image: dieway/kubectl:1.29.8
     exec-change-model:
       container:
         args:
@@ -377,6 +418,21 @@ deploymentSpec:
           \ indent=4)\n        result_message = f\"New model saved to NAS. Accuracy:\
           \ {new_model_accuracy}\"\n\n    print(result_message)\n\n"
         image: python:3.10-slim
+    exec-check-sparkapplication-status:
+      container:
+        command:
+        - bash
+        - -exc
+        - 'export sparkapplication_name=$0
+
+          export sparkapplication_namespace=$1
+
+          source checkSparkApplicationStatus.sh
+
+          '
+        - '{{$.inputs.parameters[''name'']}}'
+        - '{{$.inputs.parameters[''namespace'']}}'
+        image: dieway/check-sparkapplication-status:latest
     exec-choose-model:
       container:
         args:
@@ -428,6 +484,35 @@ deploymentSpec:
           \    data['model_path'] = final_model.path\n\n    with open(file=result.path,\
           \ mode='w', encoding='utf8') as file:\n        json.dump(data, file, indent=4)\n\
           \n"
+        image: python:3.10-slim
+    exec-get-spark-driver-name:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - get_spark_driver_name
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.9.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef get_spark_driver_name() -> str:\n    import time\n\n    return\
+          \ \"spark-process-dataset-\" + str(int(time.time()))\n\n"
         image: python:3.10-slim
     exec-load-file-from-nas-to-minio:
       container:
@@ -1294,6 +1379,41 @@ root:
           - outputArtifactKey: best_params_metrics
             producerSubtask: run-xgboost-katib-experiment
     tasks:
+      apply-sparkapplication:
+        cachingOptions: {}
+        componentRef:
+          name: comp-apply-sparkapplication
+        dependentTasks:
+        - get-spark-driver-name
+        inputs:
+          parameters:
+            name:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: get-spark-driver-name
+            object:
+              runtimeValue:
+                constant: '{"apiVersion": "sparkoperator.k8s.io/v1beta2", "kind":
+                  "SparkApplication", "metadata": {"name": "spark-app-name", "namespace":
+                  "spark-operator"}, "spec": {"type": "Python", "pythonVersion": "3",
+                  "mode": "cluster", "image": "dieway/spark-process-dataset:diabetes",
+                  "imagePullPolicy": "Always", "mainApplicationFile": "local:///home/src/pyspark_process_10kdataset.py",
+                  "sparkVersion": "3.5.0", "volumes": [{"name": "datasets-pv-sparkoperator",
+                  "persistentVolumeClaim": {"claimName": "datasets-pvc-sparkoperator"}},
+                  {"name": "datasets-raw-pv-sparkoperator", "persistentVolumeClaim":
+                  {"claimName": "datasets-raw-pvc-sparkoperator"}}], "restartPolicy":
+                  {"type": "Never"}, "driver": {"labels": {"version": "3.5.0"}, "cores":
+                  1, "coreLimit": "1200m", "memory": "512m", "serviceAccount": "spark-operator-spark",
+                  "volumeMounts": [{"name": "datasets-pv-sparkoperator", "mountPath":
+                  "/tmp/processed_dataset"}, {"name": "datasets-raw-pv-sparkoperator",
+                  "mountPath": "/tmp/dataset"}], "env": [{"name": "datasetPath", "value":
+                  "dst"}]}, "executor": {"labels": {"version": "3.5.0"}, "instances":
+                  3, "cores": 1, "coreLimit": "1200m", "memory": "512m", "volumeMounts":
+                  [{"name": "datasets-pv-sparkoperator", "mountPath": "/tmp/processed_dataset"},
+                  {"name": "datasets-raw-pv-sparkoperator", "mountPath": "/tmp/dataset"}],
+                  "env": [{"name": "datasetPath", "value": "dst"}]}}}'
+        taskInfo:
+          name: apply-sparkapplication
       change-model:
         cachingOptions:
           enableCache: true
@@ -1320,6 +1440,24 @@ root:
                 constant: /mnt/models/heart_disease_model.pkl
         taskInfo:
           name: change-model
+      check-sparkapplication-status:
+        cachingOptions: {}
+        componentRef:
+          name: comp-check-sparkapplication-status
+        dependentTasks:
+        - apply-sparkapplication
+        - get-spark-driver-name
+        inputs:
+          parameters:
+            name:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: get-spark-driver-name
+            namespace:
+              runtimeValue:
+                constant: spark-operator
+        taskInfo:
+          name: check-sparkapplication-status
       choose-model:
         cachingOptions:
           enableCache: true
@@ -1366,10 +1504,18 @@ root:
                 producerTask: run-xgboost-train
         taskInfo:
           name: choose-model
+      get-spark-driver-name:
+        cachingOptions: {}
+        componentRef:
+          name: comp-get-spark-driver-name
+        taskInfo:
+          name: get-spark-driver-name
       load-file-from-nas-to-minio:
         cachingOptions: {}
         componentRef:
           name: comp-load-file-from-nas-to-minio
+        dependentTasks:
+        - check-sparkapplication-status
         inputs:
           parameters:
             x_test_input_path:

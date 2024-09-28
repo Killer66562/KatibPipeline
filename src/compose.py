@@ -10,12 +10,13 @@ def get_spark_job_definition():
     # Read manifest file
     with open('spark-job-python-10kprocess.yaml', "r") as stream:
         spark_job_manifest = yaml.safe_load(stream)
-
-    # Add epoch time in the job name
-    epoch = int(time.time())
-    spark_job_manifest["metadata"]["name"] = spark_job_manifest["metadata"]["name"].format(epoch=epoch)
     return spark_job_manifest
 
+@component(base_image='python:3.10-slim')
+def get_spark_driver_name() -> str:
+    import time
+
+    return "spark-process-dataset-" + str(int(time.time()))
 
 @component(
     base_image='python:3.10-slim', 
@@ -1397,27 +1398,31 @@ def compose_pipeline(
     params_json_file_path: str = "/mnt/params/params_heart_disease.json", 
     models_pvc_name: str = "models-pvc"
 ):
-    '''
     sparkapplication_dict = get_spark_job_definition()
 
+    get_spark_driver_name_task = get_spark_driver_name()
+    get_spark_driver_name_task.set_caching_options(enable_caching=False)
+
     k8s_apply_op = components.load_component_from_file("k8s-apply-component.yaml")
-    apply_sparkapplication_task = k8s_apply_op(object=json.dumps(sparkapplication_dict))
+    apply_sparkapplication_task = k8s_apply_op(
+        object=json.dumps(sparkapplication_dict), 
+        name=get_spark_driver_name_task.output
+    )
     apply_sparkapplication_task.set_caching_options(enable_caching=False)
 
     check_sparkapplication_status_op = components.load_component_from_file("checkSparkapplication.yaml")
     check_sparkapplication_status_task = check_sparkapplication_status_op(
-        name=sparkapplication_dict["metadata"]["name"],
+        name=get_spark_driver_name_task.output,
         namespace=sparkapplication_dict["metadata"]["namespace"]
     ).after(apply_sparkapplication_task)
     check_sparkapplication_status_task.set_caching_options(enable_caching=False)
-    '''
 
     load_datasets_task = load_file_from_nas_to_minio(
         x_train_input_path="/mnt/datasets/heart_disease/x_train.csv", 
         x_test_input_path="/mnt/datasets/heart_disease/x_test.csv", 
         y_train_input_path="/mnt/datasets/heart_disease/y_train.csv", 
         y_test_input_path="/mnt/datasets/heart_disease/y_test.csv", 
-    )#.after(check_sparkapplication_status_task)
+    ).after(check_sparkapplication_status_task)
     load_datasets_task.set_caching_options(enable_caching=False)
 
     kubernetes.mount_pvc(

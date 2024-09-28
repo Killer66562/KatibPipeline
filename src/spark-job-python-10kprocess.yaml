@@ -18,7 +18,7 @@
 apiVersion: sparkoperator.k8s.io/v1beta2
 kind: SparkApplication
 metadata:
-  name: pyspark-process-10kdataset-{epoch}
+  name: spark-app-name
   namespace: spark-operator
 spec:
   type: Python
