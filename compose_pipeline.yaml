@@ -15,12 +15,6 @@
 #    run-random-forest-katib-experiment-best_params_metrics: system.Metrics
 #    run-xgboost-katib-experiment-best_params_metrics: system.Metrics
 components:
-  comp-apply-sparkapplication:
-    executorLabel: exec-apply-sparkapplication
-    inputDefinitions:
-      parameters:
-        object:
-          parameterType: STRING
   comp-change-model:
     executorLabel: exec-change-model
     inputDefinitions:
@@ -37,14 +31,6 @@ components:
         old_model_file_path:
           parameterType: STRING
         old_model_path:
-          parameterType: STRING
-  comp-check-sparkapplication-status:
-    executorLabel: exec-check-sparkapplication-status
-    inputDefinitions:
-      parameters:
-        name:
-          parameterType: STRING
-        namespace:
           parameterType: STRING
   comp-choose-model:
     executorLabel: exec-choose-model
@@ -340,28 +326,6 @@ components:
             schemaVersion: 0.0.1
 deploymentSpec:
   executors:
-    exec-apply-sparkapplication:
-      container:
-        command:
-        - bash
-        - -exc
-        - 'object_path=$0
-
-          dataset_path=$1
-
-          echo "$object_path" > "SparkJob.yaml"
-
-          sed -i "s|dst|$dataset_path|g" SparkJob.yaml
-
-          echo $1
-
-          cat SparkJob.yaml
-
-          kubectl apply -f SparkJob.yaml
-
-          '
-        - '{{$.inputs.parameters[''object'']}}'
-        image: dieway/kubectl:1.29.8
     exec-change-model:
       container:
         args:
@@ -413,21 +377,6 @@ deploymentSpec:
           \ indent=4)\n        result_message = f\"New model saved to NAS. Accuracy:\
           \ {new_model_accuracy}\"\n\n    print(result_message)\n\n"
         image: python:3.10-slim
-    exec-check-sparkapplication-status:
-      container:
-        command:
-        - bash
-        - -exc
-        - 'export sparkapplication_name=$0
-
-          export sparkapplication_namespace=$1
-
-          source checkSparkApplicationStatus.sh
-
-          '
-        - '{{$.inputs.parameters[''name'']}}'
-        - '{{$.inputs.parameters[''namespace'']}}'
-        image: dieway/check-sparkapplication-status:latest
     exec-choose-model:
       container:
         args:
@@ -1294,21 +1243,16 @@ deploymentSpec:
           lr\")\n    n_estimators = best_params_metrics.metadata.get(\"ne\")\n\n \
           \   x_train_df = pd.read_csv(x_train.path)\n    y_train_df = pd.read_csv(y_train.path)\n\
           \    x_test_df = pd.read_csv(x_test.path)\n    y_test_df = pd.read_csv(y_test.path)\n\
-          \n    dtrain = xgb.DMatrix(x_train_df.values, label=y_train_df.values)\n\
-          \    dtest = xgb.DMatrix(x_test_df.values, label=y_test_df.values)\n\n \
-          \   scale_pos_weight = len(y_train_df[y_train_df == 0]) / len(y_train_df[y_train_df\
-          \ == 1])\n\n    param = {\n        'eta': learning_rate, \n        'objective':\
-          \ 'binary:logistic',\n        'eval_metric': 'logloss',\n        'scale_pos_weight':\
-          \ scale_pos_weight\n    }\n\n    evallist = [(dtest, 'test')]\n    num_round\
-          \ = n_estimators\n\n    xgb_model = xgb.train(\n        param, \n      \
-          \  dtrain, \n        num_round, \n        evallist, \n        early_stopping_rounds=10\n\
-          \    )\n\n    preds = xgb_model.predict(dtest)\n\n    predictions = [round(value)\
-          \ for value in preds]\n    xgb_accuracy = accuracy_score(y_test_df.values,\
-          \ predictions)\n    print('XGBoost Test accuracy:', xgb_accuracy)\n\n  \
-          \  # Save the model\n    joblib.dump(xgb_model, model.path)\n\n     # Save\
-          \ the accuracy\n    data = {}\n    data['accuracy'] = xgb_accuracy\n   \
-          \ data['model_path'] = model.path\n\n    with open(file=file.path, mode='w',\
-          \ encoding='utf8') as file:\n        json.dump(data, file, indent=4)\n\n"
+          \n    xgb_model = xgb.XGBClassifier(\n        n_estimators=n_estimators,\
+          \ \n        learning_rate= learning_rate\n    )\n\n    xgb_model.fit(x_train_df.values,\
+          \ y_train_df.values.ravel())\n\n    preds = xgb_model.predict(x_test_df.values)\n\
+          \n    predictions = [round(value) for value in preds]\n    xgb_accuracy\
+          \ = accuracy_score(y_test_df.values, predictions)\n    print('XGBoost Test\
+          \ accuracy:', xgb_accuracy)\n\n    # Save the model\n    joblib.dump(xgb_model,\
+          \ model.path)\n\n     # Save the accuracy\n    data = {}\n    data['accuracy']\
+          \ = xgb_accuracy\n    data['model_path'] = model.path\n\n    with open(file=file.path,\
+          \ mode='w', encoding='utf8') as file:\n        json.dump(data, file, indent=4)\n\
+          \n"
         image: python:3.10-slim
 pipelineInfo:
   description: Compose of kubeflow, katib and spark
@@ -1350,35 +1294,6 @@ root:
           - outputArtifactKey: best_params_metrics
             producerSubtask: run-xgboost-katib-experiment
     tasks:
-      apply-sparkapplication:
-        cachingOptions: {}
-        componentRef:
-          name: comp-apply-sparkapplication
-        inputs:
-          parameters:
-            object:
-              runtimeValue:
-                constant: '{"apiVersion": "sparkoperator.k8s.io/v1beta2", "kind":
-                  "SparkApplication", "metadata": {"name": "pyspark-process-10kdataset-1727527020",
-                  "namespace": "spark-operator"}, "spec": {"type": "Python", "pythonVersion":
-                  "3", "mode": "cluster", "image": "dieway/spark-process-dataset:diabetes",
-                  "imagePullPolicy": "Always", "mainApplicationFile": "local:///home/src/pyspark_process_10kdataset.py",
-                  "sparkVersion": "3.5.0", "volumes": [{"name": "datasets-pv-sparkoperator",
-                  "persistentVolumeClaim": {"claimName": "datasets-pvc-sparkoperator"}},
-                  {"name": "datasets-raw-pv-sparkoperator", "persistentVolumeClaim":
-                  {"claimName": "datasets-raw-pvc-sparkoperator"}}], "restartPolicy":
-                  {"type": "Never"}, "driver": {"labels": {"version": "3.5.0"}, "cores":
-                  1, "coreLimit": "1200m", "memory": "512m", "serviceAccount": "spark-operator-spark",
-                  "volumeMounts": [{"name": "datasets-pv-sparkoperator", "mountPath":
-                  "/tmp/processed_dataset"}, {"name": "datasets-raw-pv-sparkoperator",
-                  "mountPath": "/tmp/dataset"}], "env": [{"name": "datasetPath", "value":
-                  "dst"}]}, "executor": {"labels": {"version": "3.5.0"}, "instances":
-                  3, "cores": 1, "coreLimit": "1200m", "memory": "512m", "volumeMounts":
-                  [{"name": "datasets-pv-sparkoperator", "mountPath": "/tmp/processed_dataset"},
-                  {"name": "datasets-raw-pv-sparkoperator", "mountPath": "/tmp/dataset"}],
-                  "env": [{"name": "datasetPath", "value": "dst"}]}}}'
-        taskInfo:
-          name: apply-sparkapplication
       change-model:
         cachingOptions:
           enableCache: true
@@ -1405,22 +1320,6 @@ root:
                 constant: /mnt/models/heart_disease_model.pkl
         taskInfo:
           name: change-model
-      check-sparkapplication-status:
-        cachingOptions: {}
-        componentRef:
-          name: comp-check-sparkapplication-status
-        dependentTasks:
-        - apply-sparkapplication
-        inputs:
-          parameters:
-            name:
-              runtimeValue:
-                constant: pyspark-process-10kdataset-1727527020
-            namespace:
-              runtimeValue:
-                constant: spark-operator
-        taskInfo:
-          name: check-sparkapplication-status
       choose-model:
         cachingOptions:
           enableCache: true
@@ -1471,8 +1370,6 @@ root:
         cachingOptions: {}
         componentRef:
           name: comp-load-file-from-nas-to-minio
-        dependentTasks:
-        - check-sparkapplication-status
         inputs:
           parameters:
             x_test_input_path:

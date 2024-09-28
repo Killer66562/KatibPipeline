@@ -1124,30 +1124,14 @@ def run_xgboost_train(
     x_test_df = pd.read_csv(x_test.path)
     y_test_df = pd.read_csv(y_test.path)
 
-    dtrain = xgb.DMatrix(x_train_df.values, label=y_train_df.values)
-    dtest = xgb.DMatrix(x_test_df.values, label=y_test_df.values)
-
-    scale_pos_weight = len(y_train_df[y_train_df == 0]) / len(y_train_df[y_train_df == 1])
-
-    param = {
-        'eta': learning_rate, 
-        'objective': 'binary:logistic',
-        'eval_metric': 'logloss',
-        'scale_pos_weight': scale_pos_weight
-    }
-
-    evallist = [(dtest, 'test')]
-    num_round = n_estimators
-
-    xgb_model = xgb.train(
-        param, 
-        dtrain, 
-        num_round, 
-        evallist, 
-        early_stopping_rounds=10
+    xgb_model = xgb.XGBClassifier(
+        n_estimators=n_estimators, 
+        learning_rate= learning_rate
     )
     
-    preds = xgb_model.predict(dtest)
+    xgb_model.fit(x_train_df.values, y_train_df.values.ravel())
+    
+    preds = xgb_model.predict(x_test_df.values)
 
     predictions = [round(value) for value in preds]
     xgb_accuracy = accuracy_score(y_test_df.values, predictions)
@@ -1413,6 +1397,7 @@ def compose_pipeline(
     params_json_file_path: str = "/mnt/params/params_heart_disease.json", 
     models_pvc_name: str = "models-pvc"
 ):
+    '''
     sparkapplication_dict = get_spark_job_definition()
 
     k8s_apply_op = components.load_component_from_file("k8s-apply-component.yaml")
@@ -1425,13 +1410,14 @@ def compose_pipeline(
         namespace=sparkapplication_dict["metadata"]["namespace"]
     ).after(apply_sparkapplication_task)
     check_sparkapplication_status_task.set_caching_options(enable_caching=False)
+    '''
 
     load_datasets_task = load_file_from_nas_to_minio(
         x_train_input_path="/mnt/datasets/heart_disease/x_train.csv", 
         x_test_input_path="/mnt/datasets/heart_disease/x_test.csv", 
         y_train_input_path="/mnt/datasets/heart_disease/y_train.csv", 
         y_test_input_path="/mnt/datasets/heart_disease/y_test.csv", 
-    ).after(check_sparkapplication_status_task)
+    )#.after(check_sparkapplication_status_task)
     load_datasets_task.set_caching_options(enable_caching=False)
 
     kubernetes.mount_pvc(
