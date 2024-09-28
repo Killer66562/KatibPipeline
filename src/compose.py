@@ -1,5 +1,20 @@
-from kfp import dsl, compiler, kubernetes
+from kfp import dsl, compiler, kubernetes, components
 from kfp.dsl import Input, Output, Metrics, Dataset, Model, Artifact, component, ContainerSpec,  OutputPath, InputPath
+
+import json
+
+
+def get_spark_job_definition():
+    import yaml
+    import time
+    # Read manifest file
+    with open('spark-job-python-10kprocess.yaml', "r") as stream:
+        spark_job_manifest = yaml.safe_load(stream)
+
+    # Add epoch time in the job name
+    epoch = int(time.time())
+    spark_job_manifest["metadata"]["name"] = spark_job_manifest["metadata"]["name"].format(epoch=epoch)
+    return spark_job_manifest
 
 
 @component(
@@ -1284,7 +1299,7 @@ def run_lr_train(
         json.dump(data, file, indent=4)
 
 @dsl.component(
-    base_image='python:3.9',
+    base_image='python:3.10-slim',
     packages_to_install=['joblib==1.4.2', 'scikit-learn==1.5.1', 'xgboost==2.0.3']# 
 )
 def choose_model(
@@ -1335,8 +1350,59 @@ def choose_model(
     print(result_string)
 
     # Write the result to a file
-    with open(result.path, 'w') as f:
-        f.write(result_string)
+    data = {}
+    data['accuracy'] = accuracy[best_model_name]
+    data['model_path'] = final_model.path
+
+    with open(file=result.path, mode='w', encoding='utf8') as file:
+        json.dump(data, file, indent=4)
+
+@dsl.component(
+    base_image='python:3.10-slim',
+    packages_to_install=['joblib==1.4.2', 'scikit-learn==1.5.1', 'xgboost==2.0.3']
+)
+def change_model(
+    old_model_path: str, 
+    old_model_file_path: str, 
+    new_model: Input[Model],
+    new_model_file: Input[Artifact], 
+):
+    import joblib
+    import json
+    import os
+
+    with open(new_model_file.path, 'r') as f:
+        data_new = json.load(f)
+    new_model_accuracy = data_new['accuracy']
+
+    new_model_model = joblib.load(new_model.path)
+
+    if not (os.path.exists(old_model_path) and os.path.exists(old_model_file_path)):
+        joblib.dump(new_model_model, old_model_path)
+        with open(old_model_file_path, 'w', encoding='utf-8') as file:
+            json.dump(data_new, file, indent=4)
+        result_message = f"New model saved to NAS. Accuracy: {new_model_accuracy}"
+        return None
+    
+    try:
+        with open(old_model_file_path, 'r') as f:
+            data_old = json.load(f)
+        old_model_accuracy = data_old['accuracy']
+
+        if new_model_accuracy > old_model_accuracy:
+            joblib.dump(new_model_model, old_model_path)
+            with open(old_model_file_path, 'w', encoding='utf-8') as file:
+                json.dump(data_new, file, indent=4)
+            result_message = f"Model updated. New accuracy: {new_model_accuracy}, Old accuracy: {old_model_accuracy}"
+        else:
+            result_message = f"Existing model retained. Existing accuracy: {old_model_accuracy}, New accuracy: {new_model_accuracy}"
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        joblib.dump(new_model_model, old_model_path)
+        with open(old_model_file_path, 'w', encoding='utf-8') as file:
+            json.dump(data_new, file, indent=4)
+        result_message = f"New model saved to NAS. Accuracy: {new_model_accuracy}"
+
+    print(result_message)
 
 @dsl.pipeline(
     name="compose", 
@@ -1344,14 +1410,29 @@ def choose_model(
 )
 def compose_pipeline(
     params_pvc_name: str = "params-pvc", 
-    params_json_file_path: str = "/mnt/params/params.json"
+    params_json_file_path: str = "/mnt/params/params_heart_disease.json", 
+    models_pvc_name: str = "models-pvc"
 ):
+    sparkapplication_dict = get_spark_job_definition()
+
+    k8s_apply_op = components.load_component_from_file("k8s-apply-component.yaml")
+    apply_sparkapplication_task = k8s_apply_op(object=json.dumps(sparkapplication_dict))
+    apply_sparkapplication_task.set_caching_options(enable_caching=False)
+
+    check_sparkapplication_status_op = components.load_component_from_file("checkSparkapplication.yaml")
+    check_sparkapplication_status_task = check_sparkapplication_status_op(
+        name=sparkapplication_dict["metadata"]["name"],
+        namespace=sparkapplication_dict["metadata"]["namespace"]
+    ).after(apply_sparkapplication_task)
+    check_sparkapplication_status_task.set_caching_options(enable_caching=False)
+
     load_datasets_task = load_file_from_nas_to_minio(
         x_train_input_path="/mnt/datasets/heart_disease/x_train.csv", 
         x_test_input_path="/mnt/datasets/heart_disease/x_test.csv", 
         y_train_input_path="/mnt/datasets/heart_disease/y_train.csv", 
         y_test_input_path="/mnt/datasets/heart_disease/y_test.csv", 
-    )
+    ).after(check_sparkapplication_status_task)
+    load_datasets_task.set_caching_options(enable_caching=False)
 
     kubernetes.mount_pvc(
         task=load_datasets_task, 
@@ -1361,7 +1442,8 @@ def compose_pipeline(
 
     parse_input_json_task = parse_input_json(
         json_file_path=params_json_file_path
-    )
+    ).after(load_datasets_task)
+    parse_input_json_task.set_caching_options(enable_caching=False)
 
     kubernetes.mount_pvc(
         task=parse_input_json_task, 
@@ -1426,6 +1508,19 @@ def compose_pipeline(
         xgb_file=xgboost_train_task.outputs['file'],
         rf_file=random_forest_train_task.outputs['file'],
         knn_file=knn_train_task.outputs['file']
+    )
+
+    change_model_task = change_model(
+        old_model_path="/mnt/models/heart_disease_model.pkl", 
+        old_model_file_path="/mnt/models/heart_disease_model.json", 
+        new_model=choose_model_task.outputs["final_model"], 
+        new_model_file=choose_model_task.outputs["result"]
+    )
+
+    kubernetes.mount_pvc(
+        task=change_model_task, 
+        pvc_name=models_pvc_name, 
+        mount_path="/mnt/models"
     )
 
 if __name__ == "__main__":

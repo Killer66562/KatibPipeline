@@ -1,0 +1,23 @@
+name: Apply sparkapplication
+inputs:
+  - {name: Object, type: String}
+  - {name: Dataset, type: Dataset}
+metadata:
+  annotations:
+    author: Alexey Volkov <alexey.volkov@ark-kun.com>
+implementation:
+  container:
+    image: dieway/kubectl:1.29.8
+    command:
+      - bash
+      - -exc
+      - |
+        object_path=$0
+        dataset_path=$1
+        echo "$object_path" > "SparkJob.yaml"
+        sed -i "s|dst|$dataset_path|g" SparkJob.yaml
+        echo $1
+        cat SparkJob.yaml
+        kubectl apply -f SparkJob.yaml
+      - {inputValue: Object}
+      - {inputPath: Dataset}

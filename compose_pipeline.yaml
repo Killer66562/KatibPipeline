@@ -2,7 +2,8 @@
 # Name: compose
 # Description: Compose of kubeflow, katib and spark
 # Inputs:
-#    params_json_file_path: str [Default: '/mnt/params/params.json']
+#    models_pvc_name: str [Default: 'models-pvc']
+#    params_json_file_path: str [Default: '/mnt/params/params_heart_disease.json']
 #    params_pvc_name: str [Default: 'params-pvc']
 # Outputs:
 #    parse-input-json-knn_input_metrics: system.Metrics
@@ -14,6 +15,37 @@
 #    run-random-forest-katib-experiment-best_params_metrics: system.Metrics
 #    run-xgboost-katib-experiment-best_params_metrics: system.Metrics
 components:
+  comp-apply-sparkapplication:
+    executorLabel: exec-apply-sparkapplication
+    inputDefinitions:
+      parameters:
+        object:
+          parameterType: STRING
+  comp-change-model:
+    executorLabel: exec-change-model
+    inputDefinitions:
+      artifacts:
+        new_model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+        new_model_file:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+      parameters:
+        old_model_file_path:
+          parameterType: STRING
+        old_model_path:
+          parameterType: STRING
+  comp-check-sparkapplication-status:
+    executorLabel: exec-check-sparkapplication-status
+    inputDefinitions:
+      parameters:
+        name:
+          parameterType: STRING
+        namespace:
+          parameterType: STRING
   comp-choose-model:
     executorLabel: exec-choose-model
     inputDefinitions:
@@ -308,6 +340,94 @@ components:
             schemaVersion: 0.0.1
 deploymentSpec:
   executors:
+    exec-apply-sparkapplication:
+      container:
+        command:
+        - bash
+        - -exc
+        - 'object_path=$0
+
+          dataset_path=$1
+
+          echo "$object_path" > "SparkJob.yaml"
+
+          sed -i "s|dst|$dataset_path|g" SparkJob.yaml
+
+          echo $1
+
+          cat SparkJob.yaml
+
+          kubectl apply -f SparkJob.yaml
+
+          '
+        - '{{$.inputs.parameters[''object'']}}'
+        image: dieway/kubectl:1.29.8
+    exec-change-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - change_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.9.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'joblib==1.4.2'\
+          \ 'scikit-learn==1.5.1' 'xgboost==2.0.3' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef change_model(\n    old_model_path: str, \n    old_model_file_path:\
+          \ str, \n    new_model: Input[Model],\n    new_model_file: Input[Artifact],\
+          \ \n):\n    import joblib\n    import json\n    import os\n\n    with open(new_model_file.path,\
+          \ 'r') as f:\n        data_new = json.load(f)\n    new_model_accuracy =\
+          \ data_new['accuracy']\n\n    new_model_model = joblib.load(new_model.path)\n\
+          \n    if not (os.path.exists(old_model_path) and os.path.exists(old_model_file_path)):\n\
+          \        joblib.dump(new_model_model, old_model_path)\n        with open(old_model_file_path,\
+          \ 'w', encoding='utf-8') as file:\n            json.dump(data_new, file,\
+          \ indent=4)\n        result_message = f\"New model saved to NAS. Accuracy:\
+          \ {new_model_accuracy}\"\n        return None\n\n    try:\n        with\
+          \ open(old_model_file_path, 'r') as f:\n            data_old = json.load(f)\n\
+          \        old_model_accuracy = data_old['accuracy']\n\n        if new_model_accuracy\
+          \ > old_model_accuracy:\n            joblib.dump(new_model_model, old_model_path)\n\
+          \            with open(old_model_file_path, 'w', encoding='utf-8') as file:\n\
+          \                json.dump(data_new, file, indent=4)\n            result_message\
+          \ = f\"Model updated. New accuracy: {new_model_accuracy}, Old accuracy:\
+          \ {old_model_accuracy}\"\n        else:\n            result_message = f\"\
+          Existing model retained. Existing accuracy: {old_model_accuracy}, New accuracy:\
+          \ {new_model_accuracy}\"\n    except (json.JSONDecodeError, UnicodeDecodeError):\n\
+          \        joblib.dump(new_model_model, old_model_path)\n        with open(old_model_file_path,\
+          \ 'w', encoding='utf-8') as file:\n            json.dump(data_new, file,\
+          \ indent=4)\n        result_message = f\"New model saved to NAS. Accuracy:\
+          \ {new_model_accuracy}\"\n\n    print(result_message)\n\n"
+        image: python:3.10-slim
+    exec-check-sparkapplication-status:
+      container:
+        command:
+        - bash
+        - -exc
+        - 'export sparkapplication_name=$0
+
+          export sparkapplication_namespace=$1
+
+          source checkSparkApplicationStatus.sh
+
+          '
+        - '{{$.inputs.parameters[''name'']}}'
+        - '{{$.inputs.parameters[''namespace'']}}'
+        image: dieway/check-sparkapplication-status:latest
     exec-choose-model:
       container:
         args:
@@ -355,9 +475,11 @@ deploymentSpec:
           \ : {accuracy[best_model_name]}'\n    result_string += f'\\nAccuracy:\\\
           n'\n    for model_name, acc in accuracy.items():\n        result_string\
           \ += f'{model_name:17} : {acc}\\n'\n    print(result_string)\n\n    # Write\
-          \ the result to a file\n    with open(result.path, 'w') as f:\n        f.write(result_string)\n\
+          \ the result to a file\n    data = {}\n    data['accuracy'] = accuracy[best_model_name]\n\
+          \    data['model_path'] = final_model.path\n\n    with open(file=result.path,\
+          \ mode='w', encoding='utf8') as file:\n        json.dump(data, file, indent=4)\n\
           \n"
-        image: python:3.9
+        image: python:3.10-slim
     exec-load-file-from-nas-to-minio:
       container:
         args:
@@ -1228,6 +1350,77 @@ root:
           - outputArtifactKey: best_params_metrics
             producerSubtask: run-xgboost-katib-experiment
     tasks:
+      apply-sparkapplication:
+        cachingOptions: {}
+        componentRef:
+          name: comp-apply-sparkapplication
+        inputs:
+          parameters:
+            object:
+              runtimeValue:
+                constant: '{"apiVersion": "sparkoperator.k8s.io/v1beta2", "kind":
+                  "SparkApplication", "metadata": {"name": "pyspark-process-10kdataset-1727513846",
+                  "namespace": "spark-operator"}, "spec": {"type": "Python", "pythonVersion":
+                  "3", "mode": "cluster", "image": "dieway/spark-process-dataset:diabetes",
+                  "imagePullPolicy": "Always", "mainApplicationFile": "local:///home/src/pyspark_process_10kdataset.py",
+                  "sparkVersion": "3.5.0", "volumes": [{"name": "datasets-pv-sparkoperator",
+                  "persistentVolumeClaim": {"claimName": "datasets-pvc-sparkoperator"}},
+                  {"name": "datasets-raw-pv-sparkoperator", "persistentVolumeClaim":
+                  {"claimName": "datasets-raw-pvc-sparkoperator"}}], "restartPolicy":
+                  {"type": "Never"}, "driver": {"labels": {"version": "3.5.0"}, "cores":
+                  1, "coreLimit": "1200m", "memory": "512m", "serviceAccount": "spark-operator-spark",
+                  "volumeMounts": [{"name": "datasets-pv-sparkoperator", "mountPath":
+                  "/tmp/processed_dataset"}, {"name": "datasets-raw-pv-sparkoperator",
+                  "mountPath": "/tmp/dataset"}], "env": [{"name": "datasetPath", "value":
+                  "dst"}]}, "executor": {"labels": {"version": "3.5.0"}, "instances":
+                  3, "cores": 1, "coreLimit": "1200m", "memory": "512m", "volumeMounts":
+                  [{"name": "datasets-pv-sparkoperator", "mountPath": "/tmp/processed_dataset"},
+                  {"name": "datasets-raw-pv-sparkoperator", "mountPath": "/tmp/dataset"}],
+                  "env": [{"name": "datasetPath", "value": "dst"}]}}}'
+        taskInfo:
+          name: apply-sparkapplication
+      change-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-change-model
+        dependentTasks:
+        - choose-model
+        inputs:
+          artifacts:
+            new_model:
+              taskOutputArtifact:
+                outputArtifactKey: final_model
+                producerTask: choose-model
+            new_model_file:
+              taskOutputArtifact:
+                outputArtifactKey: result
+                producerTask: choose-model
+          parameters:
+            old_model_file_path:
+              runtimeValue:
+                constant: /mnt/models/heart_disease_model.json
+            old_model_path:
+              runtimeValue:
+                constant: /mnt/models/heart_disease_model.pkl
+        taskInfo:
+          name: change-model
+      check-sparkapplication-status:
+        cachingOptions: {}
+        componentRef:
+          name: comp-check-sparkapplication-status
+        dependentTasks:
+        - apply-sparkapplication
+        inputs:
+          parameters:
+            name:
+              runtimeValue:
+                constant: pyspark-process-10kdataset-1727513846
+            namespace:
+              runtimeValue:
+                constant: spark-operator
+        taskInfo:
+          name: check-sparkapplication-status
       choose-model:
         cachingOptions:
           enableCache: true
@@ -1275,10 +1468,11 @@ root:
         taskInfo:
           name: choose-model
       load-file-from-nas-to-minio:
-        cachingOptions:
-          enableCache: true
+        cachingOptions: {}
         componentRef:
           name: comp-load-file-from-nas-to-minio
+        dependentTasks:
+        - check-sparkapplication-status
         inputs:
           parameters:
             x_test_input_path:
@@ -1296,10 +1490,11 @@ root:
         taskInfo:
           name: load-file-from-nas-to-minio
       parse-input-json:
-        cachingOptions:
-          enableCache: true
+        cachingOptions: {}
         componentRef:
           name: comp-parse-input-json
+        dependentTasks:
+        - load-file-from-nas-to-minio
         inputs:
           parameters:
             json_file_path:
@@ -1496,8 +1691,12 @@ root:
           name: run-xgboost-train
   inputDefinitions:
     parameters:
+      models_pvc_name:
+        defaultValue: models-pvc
+        isOptional: true
+        parameterType: STRING
       params_json_file_path:
-        defaultValue: /mnt/params/params.json
+        defaultValue: /mnt/params/params_heart_disease.json
         isOptional: true
         parameterType: STRING
       params_pvc_name:
@@ -1545,6 +1744,10 @@ platforms:
   kubernetes:
     deploymentSpec:
       executors:
+        exec-change-model:
+          pvcMount:
+          - componentInputParameter: models_pvc_name
+            mountPath: /mnt/models
         exec-load-file-from-nas-to-minio:
           pvcMount:
           - constant: datasets-pvc

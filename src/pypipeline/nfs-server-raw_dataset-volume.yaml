@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dataset-pvc-kubeflow-ns
+  namespace: kubeflow-user-example-com
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+  volumeName: dataset-pv-kubeflow-ns
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: dataset-pv-kubeflow-ns
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-client
+  persistentVolumeReclaimPolicy: Delete
+  nfs:
+    path: "/tmp/nfs/raw_datasets"
+    server: 10.2.12.7
