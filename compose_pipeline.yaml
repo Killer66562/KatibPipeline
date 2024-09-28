@@ -737,7 +737,7 @@ deploymentSpec:
           \        n_neighbors=n_neighbors\n    )\n    knn_model.fit(x_train_df.values,\
           \ y_train_df.values.ravel())\n\n    y_pred = knn_model.predict(x_test_df.values)\n\
           \    accuracy = accuracy_score(y_test_df.values, y_pred)\n\n    # Save the\
-          \ model\n    joblib.dump(model, model.path)\n\n    data = {}\n    data['accuracy']\
+          \ model\n    joblib.dump(knn_model, model.path)\n\n    data = {}\n    data['accuracy']\
           \ = accuracy\n    data['model_path'] = model.path\n\n    with open(file=file.path,\
           \ mode='w', encoding='utf8') as file:\n        json.dump(data, file, indent=4)\n\
           \n"
@@ -916,7 +916,7 @@ deploymentSpec:
           \        random_state=0, \n        max_iter=iterators\n    )\n    lr_model.fit(x_train_df.values,\
           \ y_train_df.values.ravel())\n\n    y_pred = lr_model.predict(x_test_df.values)\n\
           \    accuracy = accuracy_score(y_test_df.values, y_pred)\n\n    # Save the\
-          \ model\n    joblib.dump(model, model.path)\n\n    data = {}\n    data['accuracy']\
+          \ model\n    joblib.dump(lr_model, model.path)\n\n    data = {}\n    data['accuracy']\
           \ = accuracy\n    data['model_path'] = model.path\n\n    with open(file=file.path,\
           \ mode='w', encoding='utf8') as file:\n        json.dump(data, file, indent=4)\n\
           \n"
@@ -1359,7 +1359,7 @@ root:
             object:
               runtimeValue:
                 constant: '{"apiVersion": "sparkoperator.k8s.io/v1beta2", "kind":
-                  "SparkApplication", "metadata": {"name": "pyspark-process-10kdataset-1727513846",
+                  "SparkApplication", "metadata": {"name": "pyspark-process-10kdataset-1727527020",
                   "namespace": "spark-operator"}, "spec": {"type": "Python", "pythonVersion":
                   "3", "mode": "cluster", "image": "dieway/spark-process-dataset:diabetes",
                   "imagePullPolicy": "Always", "mainApplicationFile": "local:///home/src/pyspark_process_10kdataset.py",
@@ -1415,7 +1415,7 @@ root:
           parameters:
             name:
               runtimeValue:
-                constant: pyspark-process-10kdataset-1727513846
+                constant: pyspark-process-10kdataset-1727527020
             namespace:
               runtimeValue:
                 constant: spark-operator

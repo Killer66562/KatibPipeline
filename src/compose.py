@@ -1243,7 +1243,7 @@ def run_knn_train(
     accuracy = accuracy_score(y_test_df.values, y_pred)
 
     # Save the model
-    joblib.dump(model, model.path)
+    joblib.dump(knn_model, model.path)
 
     data = {}
     data['accuracy'] = accuracy
@@ -1289,7 +1289,7 @@ def run_lr_train(
     accuracy = accuracy_score(y_test_df.values, y_pred)
 
     # Save the model
-    joblib.dump(model, model.path)
+    joblib.dump(lr_model, model.path)
 
     data = {}
     data['accuracy'] = accuracy
