@@ -2,7 +2,8 @@
 # Name: compose
 # Description: Compose of kubeflow, katib and spark
 # Inputs:
-#    params_json_file_path: str [Default: '/mnt/params/params.json']
+#    models_pvc_name: str [Default: 'models-pvc']
+#    params_json_file_path: str [Default: '/mnt/params/params_heart_disease.json']
 #    params_pvc_name: str [Default: 'params-pvc']
 # Outputs:
 #    parse-input-json-knn_input_metrics: system.Metrics
@@ -14,6 +15,91 @@
 #    run-random-forest-katib-experiment-best_params_metrics: system.Metrics
 #    run-xgboost-katib-experiment-best_params_metrics: system.Metrics
 components:
+  comp-apply-sparkapplication:
+    executorLabel: exec-apply-sparkapplication
+    inputDefinitions:
+      parameters:
+        name:
+          parameterType: STRING
+        object:
+          parameterType: STRING
+  comp-change-model:
+    executorLabel: exec-change-model
+    inputDefinitions:
+      artifacts:
+        new_model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+        new_model_file:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+      parameters:
+        old_model_file_path:
+          parameterType: STRING
+        old_model_path:
+          parameterType: STRING
+  comp-check-sparkapplication-status:
+    executorLabel: exec-check-sparkapplication-status
+    inputDefinitions:
+      parameters:
+        name:
+          parameterType: STRING
+        namespace:
+          parameterType: STRING
+  comp-choose-model:
+    executorLabel: exec-choose-model
+    inputDefinitions:
+      artifacts:
+        KNN_model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+        LogisticRegression_model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+        RandomForest_model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+        XGBoost_model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+        knn_file:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+        lr_file:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+        rf_file:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+        xgb_file:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        final_model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+        result:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+  comp-get-spark-driver-name:
+    executorLabel: exec-get-spark-driver-name
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
   comp-load-file-from-nas-to-minio:
     executorLabel: exec-load-file-from-nas-to-minio
     inputDefinitions:
@@ -262,6 +348,172 @@ components:
             schemaVersion: 0.0.1
 deploymentSpec:
   executors:
+    exec-apply-sparkapplication:
+      container:
+        command:
+        - bash
+        - -exc
+        - 'object_path=$0
+
+          echo "$object_path" > "SparkJob.yaml"
+
+          sed -i "s|spark-app-name|$1|g" SparkJob.yaml
+
+          cat SparkJob.yaml
+
+          kubectl apply -f SparkJob.yaml
+
+          '
+        - '{{$.inputs.parameters[''object'']}}'
+        - '{{$.inputs.parameters[''name'']}}'
+        image: dieway/kubectl:1.29.8
+    exec-change-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - change_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.9.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'joblib==1.4.2'\
+          \ 'scikit-learn==1.5.1' 'xgboost==2.0.3' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef change_model(\n    old_model_path: str, \n    old_model_file_path:\
+          \ str, \n    new_model: Input[Model],\n    new_model_file: Input[Artifact],\
+          \ \n):\n    import joblib\n    import json\n    import os\n\n    with open(new_model_file.path,\
+          \ 'r') as f:\n        data_new = json.load(f)\n    new_model_accuracy =\
+          \ data_new['accuracy']\n\n    new_model_model = joblib.load(new_model.path)\n\
+          \n    if not (os.path.exists(old_model_path) and os.path.exists(old_model_file_path)):\n\
+          \        joblib.dump(new_model_model, old_model_path)\n        with open(old_model_file_path,\
+          \ 'w', encoding='utf-8') as file:\n            json.dump(data_new, file,\
+          \ indent=4)\n        result_message = f\"New model saved to NAS. Accuracy:\
+          \ {new_model_accuracy}\"\n        return None\n\n    try:\n        with\
+          \ open(old_model_file_path, 'r') as f:\n            data_old = json.load(f)\n\
+          \        old_model_accuracy = data_old['accuracy']\n\n        if new_model_accuracy\
+          \ > old_model_accuracy:\n            joblib.dump(new_model_model, old_model_path)\n\
+          \            with open(old_model_file_path, 'w', encoding='utf-8') as file:\n\
+          \                json.dump(data_new, file, indent=4)\n            result_message\
+          \ = f\"Model updated. New accuracy: {new_model_accuracy}, Old accuracy:\
+          \ {old_model_accuracy}\"\n        else:\n            result_message = f\"\
+          Existing model retained. Existing accuracy: {old_model_accuracy}, New accuracy:\
+          \ {new_model_accuracy}\"\n    except (json.JSONDecodeError, UnicodeDecodeError):\n\
+          \        joblib.dump(new_model_model, old_model_path)\n        with open(old_model_file_path,\
+          \ 'w', encoding='utf-8') as file:\n            json.dump(data_new, file,\
+          \ indent=4)\n        result_message = f\"New model saved to NAS. Accuracy:\
+          \ {new_model_accuracy}\"\n\n    print(result_message)\n\n"
+        image: python:3.10-slim
+    exec-check-sparkapplication-status:
+      container:
+        command:
+        - bash
+        - -exc
+        - 'export sparkapplication_name=$0
+
+          export sparkapplication_namespace=$1
+
+          source checkSparkApplicationStatus.sh
+
+          '
+        - '{{$.inputs.parameters[''name'']}}'
+        - '{{$.inputs.parameters[''namespace'']}}'
+        image: dieway/check-sparkapplication-status:latest
+    exec-choose-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - choose_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.9.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'joblib==1.4.2'\
+          \ 'scikit-learn==1.5.1' 'xgboost==2.0.3' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef choose_model(\n    LogisticRegression_model: Input[Model],\n\
+          \    XGBoost_model: Input[Model],\n    RandomForest_model: Input[Model],\n\
+          \    KNN_model: Input[Model],\n    lr_file: Input[Artifact],\n    xgb_file:\
+          \ Input[Artifact],\n    rf_file: Input[Artifact],\n    knn_file: Input[Artifact],\n\
+          \    final_model: Output[Model],\n    result: Output[Artifact]\n) -> None:\n\
+          \    import joblib\n    import json\n\n    # Define a dictionary to store\
+          \ model artifacts and their corresponding JSON files\n    models = {\n \
+          \       'LogisticRegression': lr_file,\n        'XGBoost': xgb_file,\n \
+          \       'RandomForest': rf_file,\n        'KNN': knn_file\n    }\n\n   \
+          \ accuracy = {}\n    model_paths = {}\n\n    # Read accuracies and model\
+          \ paths\n    for model_name, json_file in models.items():\n        with\
+          \ open(json_file.path, 'r') as f:\n            data = json.load(f)\n   \
+          \     accuracy[model_name] = data['accuracy']\n        model_paths[model_name]\
+          \ = data['model_path']\n\n    # Find the best model\n    best_model_name\
+          \ = max(accuracy, key=accuracy.get)\n    best_model = joblib.load(model_paths[best_model_name])\n\
+          \n    # Save the best model\n    joblib.dump(best_model, final_model.path)\n\
+          \n    # Prepare result string\n    result_string = f'Best Model is {best_model_name}\
+          \ : {accuracy[best_model_name]}'\n    result_string += f'\\nAccuracy:\\\
+          n'\n    for model_name, acc in accuracy.items():\n        result_string\
+          \ += f'{model_name:17} : {acc}\\n'\n    print(result_string)\n\n    # Write\
+          \ the result to a file\n    data = {}\n    data['accuracy'] = accuracy[best_model_name]\n\
+          \    data['model_path'] = final_model.path\n\n    with open(file=result.path,\
+          \ mode='w', encoding='utf8') as file:\n        json.dump(data, file, indent=4)\n\
+          \n"
+        image: python:3.10-slim
+    exec-get-spark-driver-name:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - get_spark_driver_name
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.9.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef get_spark_driver_name() -> str:\n    import time\n\n    return\
+          \ \"spark-process-dataset-\" + str(int(time.time()))\n\n"
+        image: python:3.10-slim
     exec-load-file-from-nas-to-minio:
       container:
         args:
@@ -426,13 +678,13 @@ deploymentSpec:
           \ = input_params_metrics.metadata.get(\"datasets_from_pvc\")\n    datasets_pvc_name\
           \ = input_params_metrics.metadata.get(\"datasets_pvc_name\")\n    datasets_pvc_mount_path\
           \ = input_params_metrics.metadata.get(\"datasets_pvc_mount_path\")\n\n \
-          \   if datasets_from_pvc is True:\n        if datasets_pvc_name is None\
-          \ or datasets_pvc_mount_path is None:\n            raise ValueError(\"Both\
-          \ datasets_pvc_name and datasets_pvc_mount_path cannot be null\")\n\n  \
-          \      volumes.append({\n            \"name\": \"datasets\", \n        \
-          \    \"persistentVolumeClaim\": {\n                \"claimName\": datasets_pvc_name\n\
-          \            }\n        })\n        volumeMounts.append({\n            \"\
-          name\": \"datasets\", \n            \"mountPath\": datasets_pvc_mount_path\n\
+          \   datasets_from_pvc = bool(datasets_from_pvc)\n\n    if datasets_from_pvc\
+          \ is True:\n        if datasets_pvc_name is None or datasets_pvc_mount_path\
+          \ is None:\n            raise ValueError(\"Both datasets_pvc_name and datasets_pvc_mount_path\
+          \ cannot be null\")\n\n        volumes.append({\n            \"name\": \"\
+          datasets\", \n            \"persistentVolumeClaim\": {\n               \
+          \ \"claimName\": datasets_pvc_name\n            }\n        })\n        volumeMounts.append({\n\
+          \            \"name\": \"datasets\", \n            \"mountPath\": datasets_pvc_mount_path\n\
           \        })\n\n    '''\n    if save_model is True:\n        volumes.append({\n\
           \            \"name\": \"models\", \n            \"persistentVolumeClaim\"\
           : {\n                \"claimName\": models_pvc_name\n            }\n   \
@@ -440,11 +692,13 @@ deploymentSpec:
           , \n            \"mountPath\": \"/opt/rfc/models\"\n        })\n\n    if\
           \ datasets_from_pvc is True or save_model is True:\n        train_container[\"\
           volumeMounts\"] = volumeMounts\n        template_spec[\"volumes\"] = volumes\n\
-          \    '''\n\n    trial_spec={\n        \"apiVersion\": \"batch/v1\",\n  \
-          \      \"kind\": \"Job\",\n        \"spec\": {\n            \"template\"\
-          : {\n                \"metadata\": {\n                    \"annotations\"\
-          : {\n                        \"sidecar.istio.io/inject\": \"false\"\n  \
-          \                  }\n                },\n                \"spec\": template_spec\n\
+          \    '''\n    if datasets_from_pvc is True:\n        train_container[\"\
+          volumeMounts\"] = volumeMounts\n        template_spec[\"volumes\"] = volumes\n\
+          \n    trial_spec={\n        \"apiVersion\": \"batch/v1\",\n        \"kind\"\
+          : \"Job\",\n        \"spec\": {\n            \"template\": {\n         \
+          \       \"metadata\": {\n                    \"annotations\": {\n      \
+          \                  \"sidecar.istio.io/inject\": \"false\"\n            \
+          \        }\n                },\n                \"spec\": template_spec\n\
           \            }\n        }\n    }\n\n    trial_template=V1beta1TrialTemplate(\n\
           \        primary_container_name=\"training-container\",\n        trial_parameters=[\n\
           \            V1beta1TrialParameterSpec(\n                name=\"nNeighbors\"\
@@ -517,7 +771,7 @@ deploymentSpec:
           \        n_neighbors=n_neighbors\n    )\n    knn_model.fit(x_train_df.values,\
           \ y_train_df.values.ravel())\n\n    y_pred = knn_model.predict(x_test_df.values)\n\
           \    accuracy = accuracy_score(y_test_df.values, y_pred)\n\n    # Save the\
-          \ model\n    joblib.dump(model, model.path)\n\n    data = {}\n    data['accuracy']\
+          \ model\n    joblib.dump(knn_model, model.path)\n\n    data = {}\n    data['accuracy']\
           \ = accuracy\n    data['model_path'] = model.path\n\n    with open(file=file.path,\
           \ mode='w', encoding='utf8') as file:\n        json.dump(data, file, indent=4)\n\
           \n"
@@ -605,37 +859,37 @@ deploymentSpec:
           \ = input_params_metrics.metadata.get(\"datasets_from_pvc\")\n    datasets_pvc_name\
           \ = input_params_metrics.metadata.get(\"datasets_pvc_name\")\n    datasets_pvc_mount_path\
           \ = input_params_metrics.metadata.get(\"datasets_pvc_mount_path\")\n\n \
-          \   if datasets_from_pvc is True:\n        if datasets_pvc_name is None\
-          \ or datasets_pvc_mount_path is None:\n            raise ValueError(\"Both\
-          \ datasets_pvc_name and datasets_pvc_mount_path cannot be null\")\n\n  \
-          \      volumes.append({\n            \"name\": \"datasets\", \n        \
-          \    \"persistentVolumeClaim\": {\n                \"claimName\": datasets_pvc_name\n\
-          \            }\n        })\n        volumeMounts.append({\n            \"\
-          name\": \"datasets\", \n            \"mountPath\": datasets_pvc_mount_path\n\
+          \   datasets_from_pvc = bool(datasets_from_pvc)\n\n    if datasets_from_pvc\
+          \ is True:\n        if datasets_pvc_name is None or datasets_pvc_mount_path\
+          \ is None:\n            raise ValueError(\"Both datasets_pvc_name and datasets_pvc_mount_path\
+          \ cannot be null\")\n\n        volumes.append({\n            \"name\": \"\
+          datasets\", \n            \"persistentVolumeClaim\": {\n               \
+          \ \"claimName\": datasets_pvc_name\n            }\n        })\n        volumeMounts.append({\n\
+          \            \"name\": \"datasets\", \n            \"mountPath\": datasets_pvc_mount_path\n\
           \        })\n\n    '''\n    if save_model is True:\n        volumes.append({\n\
           \            \"name\": \"models\", \n            \"persistentVolumeClaim\"\
           : {\n                \"claimName\": models_pvc_name\n            }\n   \
           \     })\n        volumeMounts.append({\n            \"name\": \"models\"\
-          , \n            \"mountPath\": \"/opt/lr/models\"\n        })\n\n    if\
-          \ datasets_from_pvc is True or save_model is True:\n        train_container[\"\
-          volumeMounts\"] = volumeMounts\n        template_spec[\"volumes\"] = volumes\n\
-          \    '''\n\n    trial_spec={\n        \"apiVersion\": \"batch/v1\",\n  \
-          \      \"kind\": \"Job\",\n        \"spec\": {\n            \"template\"\
-          : {\n                \"metadata\": {\n                    \"annotations\"\
-          : {\n                        \"sidecar.istio.io/inject\": \"false\"\n  \
-          \                  }\n                },\n                \"spec\": template_spec\n\
-          \            }\n        }\n    }\n\n    trial_template=V1beta1TrialTemplate(\n\
-          \        primary_container_name=\"training-container\",\n        trial_parameters=[\n\
-          \            V1beta1TrialParameterSpec(\n                name=\"iterators\"\
-          ,\n                description=\"iterators for the training model\",\n \
-          \               reference=\"it\"\n            )\n        ],\n        trial_spec=trial_spec,\n\
-          \        retain=True\n    )\n\n    max_trial_counts = input_params_metrics.metadata.get(\"\
-          max_trial_counts\")\n    max_failed_trial_counts = input_params_metrics.metadata.get(\"\
-          max_failed_trial_counts\")\n    parallel_trial_counts = input_params_metrics.metadata.get(\"\
-          parallel_trial_counts\")\n\n    if max_failed_trial_counts is None or max_failed_trial_counts\
-          \ is None or parallel_trial_counts is None:\n        raise ValueError(\"\
-          All max_trial_counts, max_failed_trial_counts and parallel_trial_counts\
-          \ cannot be null!\")\n\n    try:\n        max_trial_counts = int(max_trial_counts)\n\
+          , \n            \"mountPath\": \"/opt/lr/models\"\n        })\n    '''\n\
+          \n    if datasets_from_pvc is True:\n        train_container[\"volumeMounts\"\
+          ] = volumeMounts\n        template_spec[\"volumes\"] = volumes\n\n    trial_spec={\n\
+          \        \"apiVersion\": \"batch/v1\",\n        \"kind\": \"Job\",\n   \
+          \     \"spec\": {\n            \"template\": {\n                \"metadata\"\
+          : {\n                    \"annotations\": {\n                        \"\
+          sidecar.istio.io/inject\": \"false\"\n                    }\n          \
+          \      },\n                \"spec\": template_spec\n            }\n    \
+          \    }\n    }\n\n    trial_template=V1beta1TrialTemplate(\n        primary_container_name=\"\
+          training-container\",\n        trial_parameters=[\n            V1beta1TrialParameterSpec(\n\
+          \                name=\"iterators\",\n                description=\"iterators\
+          \ for the training model\",\n                reference=\"it\"\n        \
+          \    )\n        ],\n        trial_spec=trial_spec,\n        retain=True\n\
+          \    )\n\n    max_trial_counts = input_params_metrics.metadata.get(\"max_trial_counts\"\
+          )\n    max_failed_trial_counts = input_params_metrics.metadata.get(\"max_failed_trial_counts\"\
+          )\n    parallel_trial_counts = input_params_metrics.metadata.get(\"parallel_trial_counts\"\
+          )\n\n    if max_failed_trial_counts is None or max_failed_trial_counts is\
+          \ None or parallel_trial_counts is None:\n        raise ValueError(\"All\
+          \ max_trial_counts, max_failed_trial_counts and parallel_trial_counts cannot\
+          \ be null!\")\n\n    try:\n        max_trial_counts = int(max_trial_counts)\n\
           \        max_failed_trial_counts = int(max_failed_trial_counts)\n      \
           \  parallel_trial_counts = int(parallel_trial_counts)\n    except ValueError:\n\
           \        raise ValueError(\"All max_trial_counts, max_failed_trial_counts\
@@ -696,7 +950,7 @@ deploymentSpec:
           \        random_state=0, \n        max_iter=iterators\n    )\n    lr_model.fit(x_train_df.values,\
           \ y_train_df.values.ravel())\n\n    y_pred = lr_model.predict(x_test_df.values)\n\
           \    accuracy = accuracy_score(y_test_df.values, y_pred)\n\n    # Save the\
-          \ model\n    joblib.dump(model, model.path)\n\n    data = {}\n    data['accuracy']\
+          \ model\n    joblib.dump(lr_model, model.path)\n\n    data = {}\n    data['accuracy']\
           \ = accuracy\n    data['model_path'] = model.path\n\n    with open(file=file.path,\
           \ mode='w', encoding='utf8') as file:\n        json.dump(data, file, indent=4)\n\
           \n"
@@ -784,13 +1038,13 @@ deploymentSpec:
           \ = input_params_metrics.metadata.get(\"datasets_from_pvc\")\n    datasets_pvc_name\
           \ = input_params_metrics.metadata.get(\"datasets_pvc_name\")\n    datasets_pvc_mount_path\
           \ = input_params_metrics.metadata.get(\"datasets_pvc_mount_path\")\n\n \
-          \   if datasets_from_pvc is True:\n        if datasets_pvc_name is None\
-          \ or datasets_pvc_mount_path is None:\n            raise ValueError(\"Both\
-          \ datasets_pvc_name and datasets_pvc_mount_path cannot be null\")\n\n  \
-          \      volumes.append({\n            \"name\": \"datasets\", \n        \
-          \    \"persistentVolumeClaim\": {\n                \"claimName\": datasets_pvc_name\n\
-          \            }\n        })\n        volumeMounts.append({\n            \"\
-          name\": \"datasets\", \n            \"mountPath\": datasets_pvc_mount_path\n\
+          \   datasets_from_pvc = bool(datasets_from_pvc)\n\n    if datasets_from_pvc\
+          \ is True:\n        if datasets_pvc_name is None or datasets_pvc_mount_path\
+          \ is None:\n            raise ValueError(\"Both datasets_pvc_name and datasets_pvc_mount_path\
+          \ cannot be null\")\n\n        volumes.append({\n            \"name\": \"\
+          datasets\", \n            \"persistentVolumeClaim\": {\n               \
+          \ \"claimName\": datasets_pvc_name\n            }\n        })\n        volumeMounts.append({\n\
+          \            \"name\": \"datasets\", \n            \"mountPath\": datasets_pvc_mount_path\n\
           \        })\n\n    '''\n    if save_model is True:\n        volumes.append({\n\
           \            \"name\": \"models\", \n            \"persistentVolumeClaim\"\
           : {\n                \"claimName\": models_pvc_name\n            }\n   \
@@ -798,11 +1052,13 @@ deploymentSpec:
           , \n            \"mountPath\": \"/opt/rfc/models\"\n        })\n\n    if\
           \ datasets_from_pvc is True or save_model is True:\n        train_container[\"\
           volumeMounts\"] = volumeMounts\n        template_spec[\"volumes\"] = volumes\n\
-          \    '''\n\n    trial_spec={\n        \"apiVersion\": \"batch/v1\",\n  \
-          \      \"kind\": \"Job\",\n        \"spec\": {\n            \"template\"\
-          : {\n                \"metadata\": {\n                    \"annotations\"\
-          : {\n                        \"sidecar.istio.io/inject\": \"false\"\n  \
-          \                  }\n                },\n                \"spec\": template_spec\n\
+          \    '''\n    if datasets_from_pvc is True:\n        train_container[\"\
+          volumeMounts\"] = volumeMounts\n        template_spec[\"volumes\"] = volumes\n\
+          \n    trial_spec={\n        \"apiVersion\": \"batch/v1\",\n        \"kind\"\
+          : \"Job\",\n        \"spec\": {\n            \"template\": {\n         \
+          \       \"metadata\": {\n                    \"annotations\": {\n      \
+          \                  \"sidecar.istio.io/inject\": \"false\"\n            \
+          \        }\n                },\n                \"spec\": template_spec\n\
           \            }\n        }\n    }\n\n    trial_template=V1beta1TrialTemplate(\n\
           \        primary_container_name=\"training-container\",\n        trial_parameters=[\n\
           \            V1beta1TrialParameterSpec(\n                name=\"nEstimators\"\
@@ -977,13 +1233,14 @@ deploymentSpec:
           \ = []\n    volumeMounts = []\n\n    datasets_from_pvc = input_params_metrics.metadata.get(\"\
           datasets_from_pvc\")\n    datasets_pvc_name = input_params_metrics.metadata.get(\"\
           datasets_pvc_name\")\n    datasets_pvc_mount_path = input_params_metrics.metadata.get(\"\
-          datasets_pvc_mount_path\")\n\n    if datasets_from_pvc is True:\n      \
-          \  if datasets_pvc_name is None or datasets_pvc_mount_path is None:\n  \
-          \          raise ValueError(\"Both datasets_pvc_name and datasets_pvc_mount_path\
-          \ cannot be null\")\n\n        volumes.append({\n            \"name\": \"\
-          datasets\", \n            \"persistentVolumeClaim\": {\n               \
-          \ \"claimName\": datasets_pvc_name\n            }\n        })\n        volumeMounts.append({\n\
-          \            \"name\": \"datasets\", \n            \"mountPath\": datasets_pvc_mount_path\n\
+          datasets_pvc_mount_path\")\n\n    datasets_from_pvc = bool(datasets_from_pvc)\n\
+          \n    if datasets_from_pvc is True:\n        if datasets_pvc_name is None\
+          \ or datasets_pvc_mount_path is None:\n            raise ValueError(\"Both\
+          \ datasets_pvc_name and datasets_pvc_mount_path cannot be null\")\n\n  \
+          \      volumes.append({\n            \"name\": \"datasets\", \n        \
+          \    \"persistentVolumeClaim\": {\n                \"claimName\": datasets_pvc_name\n\
+          \            }\n        })\n        volumeMounts.append({\n            \"\
+          name\": \"datasets\", \n            \"mountPath\": datasets_pvc_mount_path\n\
           \        })\n\n    '''\n    if save_model is True:\n        volumes.append({\n\
           \            \"name\": \"models\", \n            \"persistentVolumeClaim\"\
           : {\n                \"claimName\": models_pvc_name\n            }\n   \
@@ -991,11 +1248,13 @@ deploymentSpec:
           , \n            \"mountPath\": \"/opt/xgboost/models\"\n        })\n\n \
           \   if datasets_from_pvc is True or save_model is True:\n        train_container[\"\
           volumeMounts\"] = volumeMounts\n        template_spec[\"volumes\"] = volumes\n\
-          \    '''\n\n    trial_spec={\n        \"apiVersion\": \"batch/v1\",\n  \
-          \      \"kind\": \"Job\",\n        \"spec\": {\n            \"template\"\
-          : {\n                \"metadata\": {\n                    \"annotations\"\
-          : {\n                        \"sidecar.istio.io/inject\": \"false\"\n  \
-          \                  }\n                },\n                \"spec\": template_spec\n\
+          \    '''\n    if datasets_from_pvc is True:\n        train_container[\"\
+          volumeMounts\"] = volumeMounts\n        template_spec[\"volumes\"] = volumes\n\
+          \n    trial_spec={\n        \"apiVersion\": \"batch/v1\",\n        \"kind\"\
+          : \"Job\",\n        \"spec\": {\n            \"template\": {\n         \
+          \       \"metadata\": {\n                    \"annotations\": {\n      \
+          \                  \"sidecar.istio.io/inject\": \"false\"\n            \
+          \        }\n                },\n                \"spec\": template_spec\n\
           \            }\n        }\n    }\n\n    trial_template=V1beta1TrialTemplate(\n\
           \        primary_container_name=\"training-container\",\n        trial_parameters=[\n\
           \            V1beta1TrialParameterSpec(\n                name=\"learningRate\"\
@@ -1069,21 +1328,16 @@ deploymentSpec:
           lr\")\n    n_estimators = best_params_metrics.metadata.get(\"ne\")\n\n \
           \   x_train_df = pd.read_csv(x_train.path)\n    y_train_df = pd.read_csv(y_train.path)\n\
           \    x_test_df = pd.read_csv(x_test.path)\n    y_test_df = pd.read_csv(y_test.path)\n\
-          \n    dtrain = xgb.DMatrix(x_train_df.values, label=y_train_df.values)\n\
-          \    dtest = xgb.DMatrix(x_test_df.values, label=y_test_df.values)\n\n \
-          \   scale_pos_weight = len(y_train_df[y_train_df == 0]) / len(y_train_df[y_train_df\
-          \ == 1])\n\n    param = {\n        'eta': learning_rate, \n        'objective':\
-          \ 'binary:logistic',\n        'eval_metric': 'logloss',\n        'scale_pos_weight':\
-          \ scale_pos_weight\n    }\n\n    evallist = [(dtest, 'test')]\n    num_round\
-          \ = n_estimators\n\n    xgb_model = xgb.train(\n        param, \n      \
-          \  dtrain, \n        num_round, \n        evallist, \n        early_stopping_rounds=10\n\
-          \    )\n\n    preds = xgb_model.predict(dtest)\n\n    predictions = [round(value)\
-          \ for value in preds]\n    xgb_accuracy = accuracy_score(y_test_df.values,\
-          \ predictions)\n    print('XGBoost Test accuracy:', xgb_accuracy)\n\n  \
-          \  # Save the model\n    joblib.dump(xgb_model, model.path)\n\n     # Save\
-          \ the accuracy\n    data = {}\n    data['accuracy'] = xgb_accuracy\n   \
-          \ data['model_path'] = model.path\n\n    with open(file=file.path, mode='w',\
-          \ encoding='utf8') as file:\n        json.dump(data, file, indent=4)\n\n"
+          \n    xgb_model = xgb.XGBClassifier(\n        n_estimators=n_estimators,\
+          \ \n        learning_rate= learning_rate\n    )\n\n    xgb_model.fit(x_train_df.values,\
+          \ y_train_df.values.ravel())\n\n    preds = xgb_model.predict(x_test_df.values)\n\
+          \n    predictions = [round(value) for value in preds]\n    xgb_accuracy\
+          \ = accuracy_score(y_test_df.values, predictions)\n    print('XGBoost Test\
+          \ accuracy:', xgb_accuracy)\n\n    # Save the model\n    joblib.dump(xgb_model,\
+          \ model.path)\n\n     # Save the accuracy\n    data = {}\n    data['accuracy']\
+          \ = xgb_accuracy\n    data['model_path'] = model.path\n\n    with open(file=file.path,\
+          \ mode='w', encoding='utf8') as file:\n        json.dump(data, file, indent=4)\n\
+          \n"
         image: python:3.10-slim
 pipelineInfo:
   description: Compose of kubeflow, katib and spark
@@ -1125,11 +1379,143 @@ root:
           - outputArtifactKey: best_params_metrics
             producerSubtask: run-xgboost-katib-experiment
     tasks:
-      load-file-from-nas-to-minio:
+      apply-sparkapplication:
+        cachingOptions: {}
+        componentRef:
+          name: comp-apply-sparkapplication
+        dependentTasks:
+        - get-spark-driver-name
+        inputs:
+          parameters:
+            name:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: get-spark-driver-name
+            object:
+              runtimeValue:
+                constant: '{"apiVersion": "sparkoperator.k8s.io/v1beta2", "kind":
+                  "SparkApplication", "metadata": {"name": "spark-app-name", "namespace":
+                  "spark-operator"}, "spec": {"type": "Python", "pythonVersion": "3",
+                  "mode": "cluster", "image": "dieway/spark-process-dataset:diabetes",
+                  "imagePullPolicy": "Always", "mainApplicationFile": "local:///home/src/pyspark_process_10kdataset.py",
+                  "sparkVersion": "3.5.0", "volumes": [{"name": "datasets-pv-sparkoperator",
+                  "persistentVolumeClaim": {"claimName": "datasets-pvc-sparkoperator"}},
+                  {"name": "datasets-raw-pv-sparkoperator", "persistentVolumeClaim":
+                  {"claimName": "datasets-raw-pvc-sparkoperator"}}], "restartPolicy":
+                  {"type": "Never"}, "driver": {"labels": {"version": "3.5.0"}, "cores":
+                  1, "coreLimit": "1200m", "memory": "512m", "serviceAccount": "spark-operator-spark",
+                  "volumeMounts": [{"name": "datasets-pv-sparkoperator", "mountPath":
+                  "/tmp/processed_dataset"}, {"name": "datasets-raw-pv-sparkoperator",
+                  "mountPath": "/tmp/dataset"}], "env": [{"name": "datasetPath", "value":
+                  "dst"}]}, "executor": {"labels": {"version": "3.5.0"}, "instances":
+                  3, "cores": 1, "coreLimit": "1200m", "memory": "512m", "volumeMounts":
+                  [{"name": "datasets-pv-sparkoperator", "mountPath": "/tmp/processed_dataset"},
+                  {"name": "datasets-raw-pv-sparkoperator", "mountPath": "/tmp/dataset"}],
+                  "env": [{"name": "datasetPath", "value": "dst"}]}}}'
+        taskInfo:
+          name: apply-sparkapplication
+      change-model:
         cachingOptions:
           enableCache: true
         componentRef:
+          name: comp-change-model
+        dependentTasks:
+        - choose-model
+        inputs:
+          artifacts:
+            new_model:
+              taskOutputArtifact:
+                outputArtifactKey: final_model
+                producerTask: choose-model
+            new_model_file:
+              taskOutputArtifact:
+                outputArtifactKey: result
+                producerTask: choose-model
+          parameters:
+            old_model_file_path:
+              runtimeValue:
+                constant: /mnt/models/heart_disease_model.json
+            old_model_path:
+              runtimeValue:
+                constant: /mnt/models/heart_disease_model.pkl
+        taskInfo:
+          name: change-model
+      check-sparkapplication-status:
+        cachingOptions: {}
+        componentRef:
+          name: comp-check-sparkapplication-status
+        dependentTasks:
+        - apply-sparkapplication
+        - get-spark-driver-name
+        inputs:
+          parameters:
+            name:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: get-spark-driver-name
+            namespace:
+              runtimeValue:
+                constant: spark-operator
+        taskInfo:
+          name: check-sparkapplication-status
+      choose-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-choose-model
+        dependentTasks:
+        - run-knn-train
+        - run-lr-train
+        - run-random-forest-train
+        - run-xgboost-train
+        inputs:
+          artifacts:
+            KNN_model:
+              taskOutputArtifact:
+                outputArtifactKey: model
+                producerTask: run-knn-train
+            LogisticRegression_model:
+              taskOutputArtifact:
+                outputArtifactKey: model
+                producerTask: run-lr-train
+            RandomForest_model:
+              taskOutputArtifact:
+                outputArtifactKey: model
+                producerTask: run-random-forest-train
+            XGBoost_model:
+              taskOutputArtifact:
+                outputArtifactKey: model
+                producerTask: run-xgboost-train
+            knn_file:
+              taskOutputArtifact:
+                outputArtifactKey: file
+                producerTask: run-knn-train
+            lr_file:
+              taskOutputArtifact:
+                outputArtifactKey: file
+                producerTask: run-lr-train
+            rf_file:
+              taskOutputArtifact:
+                outputArtifactKey: file
+                producerTask: run-random-forest-train
+            xgb_file:
+              taskOutputArtifact:
+                outputArtifactKey: file
+                producerTask: run-xgboost-train
+        taskInfo:
+          name: choose-model
+      get-spark-driver-name:
+        cachingOptions: {}
+        componentRef:
+          name: comp-get-spark-driver-name
+        taskInfo:
+          name: get-spark-driver-name
+      load-file-from-nas-to-minio:
+        cachingOptions: {}
+        componentRef:
           name: comp-load-file-from-nas-to-minio
+        dependentTasks:
+        - check-sparkapplication-status
         inputs:
           parameters:
             x_test_input_path:
@@ -1147,10 +1533,11 @@ root:
         taskInfo:
           name: load-file-from-nas-to-minio
       parse-input-json:
-        cachingOptions:
-          enableCache: true
+        cachingOptions: {}
         componentRef:
           name: comp-parse-input-json
+        dependentTasks:
+        - load-file-from-nas-to-minio
         inputs:
           parameters:
             json_file_path:
@@ -1347,8 +1734,12 @@ root:
           name: run-xgboost-train
   inputDefinitions:
     parameters:
+      models_pvc_name:
+        defaultValue: models-pvc
+        isOptional: true
+        parameterType: STRING
       params_json_file_path:
-        defaultValue: /mnt/params/params.json
+        defaultValue: /mnt/params/params_heart_disease.json
         isOptional: true
         parameterType: STRING
       params_pvc_name:
@@ -1396,6 +1787,10 @@ platforms:
   kubernetes:
     deploymentSpec:
       executors:
+        exec-change-model:
+          pvcMount:
+          - componentInputParameter: models_pvc_name
+            mountPath: /mnt/models
         exec-load-file-from-nas-to-minio:
           pvcMount:
           - constant: datasets-pvc

@@ -1,0 +1,229 @@
+# PIPELINE DEFINITION
+# Name: spark-operator-job-pipeline
+# Description: Spark Operator job pipeline
+components:
+  comp-apply-sparkapplication:
+    executorLabel: exec-apply-sparkapplication
+    inputDefinitions:
+      artifacts:
+        dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+      parameters:
+        object:
+          parameterType: STRING
+  comp-check-sparkapplication-status:
+    executorLabel: exec-check-sparkapplication-status
+    inputDefinitions:
+      parameters:
+        name:
+          parameterType: STRING
+        namespace:
+          parameterType: STRING
+  comp-load-raw-datasets-from-nfs:
+    executorLabel: exec-load-raw-datasets-from-nfs
+    outputDefinitions:
+      artifacts:
+        diabetes_dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-print-msg:
+    executorLabel: exec-print-msg
+    inputDefinitions:
+      parameters:
+        msg:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+deploymentSpec:
+  executors:
+    exec-apply-sparkapplication:
+      container:
+        command:
+        - bash
+        - -exc
+        - 'object_path=$0
+
+          dataset_path=$1
+
+          echo "$object_path" > "SparkJob.yaml"
+
+          sed -i "s|dst|$dataset_path|g" SparkJob.yaml
+
+          echo $1
+
+          cat SparkJob.yaml
+
+          kubectl apply -f SparkJob.yaml
+
+          '
+        - '{{$.inputs.parameters[''object'']}}'
+        - '{{$.inputs.artifacts[''dataset''].path}}'
+        image: dieway/kubectl:1.29.8
+    exec-check-sparkapplication-status:
+      container:
+        command:
+        - bash
+        - -exc
+        - 'export sparkapplication_name=$0
+
+          export sparkapplication_namespace=$1
+
+          source checkSparkApplicationStatus.sh
+
+          '
+        - '{{$.inputs.parameters[''name'']}}'
+        - '{{$.inputs.parameters[''namespace'']}}'
+        image: dieway/check-sparkapplication-status:latest
+    exec-load-raw-datasets-from-nfs:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - load_raw_datasets_from_nfs
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.9.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'python-dotenv==1.0.1'\
+          \ 'pandas==2.2.2' 'numpy==2.0.0' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef load_raw_datasets_from_nfs(\n  diabetes_dataset: Output[Dataset]\n\
+          ):\n  import pandas as pd\n# fix csv path\n  dataset_pd = pd.read_csv('/mnt/10kdataset.csv')\n\
+          \  dataset_pd.to_csv(diabetes_dataset.path)\n\n"
+        image: python:3.9
+    exec-print-msg:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - print_msg
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.9.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef print_msg(msg: str) -> str:\n    print(msg)\n    return msg\n\
+          \n"
+        image: python:3.9
+pipelineInfo:
+  description: Spark Operator job pipeline
+  name: spark-operator-job-pipeline
+root:
+  dag:
+    tasks:
+      apply-sparkapplication:
+        cachingOptions: {}
+        componentRef:
+          name: comp-apply-sparkapplication
+        dependentTasks:
+        - load-raw-datasets-from-nfs
+        inputs:
+          artifacts:
+            dataset:
+              taskOutputArtifact:
+                outputArtifactKey: diabetes_dataset
+                producerTask: load-raw-datasets-from-nfs
+          parameters:
+            object:
+              runtimeValue:
+                constant: '{"apiVersion": "sparkoperator.k8s.io/v1beta2", "kind":
+                  "SparkApplication", "metadata": {"name": "pyspark-process-10kdataset-1727435478",
+                  "namespace": "spark-operator"}, "spec": {"type": "Python", "pythonVersion":
+                  "3", "mode": "cluster", "image": "dieway/spark-process-dataset:latest",
+                  "imagePullPolicy": "Always", "mainApplicationFile": "local:///home/src/pyspark_process_10kdataset.py",
+                  "sparkVersion": "3.5.0", "volumes": [{"name": "datasets-pv-sparkoperator",
+                  "persistentVolumeClaim": {"claimName": "datasets-pvc-sparkoperator"}},
+                  {"name": "datasets-raw-pv-sparkoperator", "persistentVolumeClaim":
+                  {"claimName": "datasets-raw-pvc-sparkoperator"}}], "restartPolicy":
+                  {"type": "Never"}, "driver": {"labels": {"version": "3.5.0"}, "cores":
+                  1, "coreLimit": "1200m", "memory": "512m", "serviceAccount": "spark-operator-spark",
+                  "volumeMounts": [{"name": "datasets-pv-sparkoperator", "mountPath":
+                  "/tmp/processed_dataset"}, {"name": "datasets-raw-pv-sparkoperator",
+                  "mountPath": "/tmp/dataset"}], "env": [{"name": "datasetPath", "value":
+                  "dst"}]}, "executor": {"labels": {"version": "3.5.0"}, "instances":
+                  1, "cores": 1, "coreLimit": "1200m", "memory": "512m", "volumeMounts":
+                  [{"name": "datasets-pv-sparkoperator", "mountPath": "/tmp/processed_dataset"},
+                  {"name": "datasets-raw-pv-sparkoperator", "mountPath": "/tmp/dataset"}],
+                  "env": [{"name": "datasetPath", "value": "dst"}]}}}'
+        taskInfo:
+          name: apply-sparkapplication
+      check-sparkapplication-status:
+        cachingOptions: {}
+        componentRef:
+          name: comp-check-sparkapplication-status
+        dependentTasks:
+        - apply-sparkapplication
+        inputs:
+          parameters:
+            name:
+              runtimeValue:
+                constant: pyspark-process-10kdataset-1727435478
+            namespace:
+              runtimeValue:
+                constant: spark-operator
+        taskInfo:
+          name: check-sparkapplication-status
+      load-raw-datasets-from-nfs:
+        cachingOptions: {}
+        componentRef:
+          name: comp-load-raw-datasets-from-nfs
+        taskInfo:
+          name: load-raw-datasets-from-nfs
+      print-msg:
+        cachingOptions: {}
+        componentRef:
+          name: comp-print-msg
+        dependentTasks:
+        - check-sparkapplication-status
+        inputs:
+          parameters:
+            msg:
+              runtimeValue:
+                constant: Job pyspark-process-10kdataset-1727435478 is completed.
+        taskInfo:
+          name: print-msg
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.9.0
+---
+platforms:
+  kubernetes:
+    deploymentSpec:
+      executors:
+        exec-load-raw-datasets-from-nfs:
+          pvcMount:
+          - constant: datasets-raw-pvc
+            mountPath: /mnt

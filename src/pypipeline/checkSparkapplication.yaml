@@ -1,0 +1,19 @@
+name: check sparkapplication status
+inputs:
+  - {name: Name, type: String}
+  - {name: Namespace, type: String}
+metadata:
+  annotations:
+    author: Alexey Volkov <alexey.volkov@ark-kun.com>
+implementation:
+  container:
+    image: dieway/check-sparkapplication-status:latest
+    command:
+      - bash
+      - -exc
+      - |
+        export sparkapplication_name=$0
+        export sparkapplication_namespace=$1
+        source checkSparkApplicationStatus.sh
+      - {inputValue: Name}
+      - {inputValue: Namespace}
