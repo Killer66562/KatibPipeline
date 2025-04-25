@@ -1,5 +1,5 @@
 from kfp import dsl, compiler, kubernetes, components
-from kfp.dsl import Input, Output, Metrics, Dataset, Model, Artifact, component, ContainerSpec,  OutputPath, InputPath
+from kfp.dsl import Input, Output, Metrics, Dataset, Model, Artifact, component, ContainerSpec,  OutputPath, InputPath, ClassificationMetrics
 
 import json
 
@@ -1108,14 +1108,16 @@ def run_xgboost_train(
     y_train: Input[Dataset], 
     y_test: Input[Dataset], 
     model: Output[Model], 
-    file: Output[Artifact]
+    file: Output[Artifact], 
+    metrics: Output[Metrics], 
+    confusion_metrics: Output[ClassificationMetrics]
 ):
     import pandas as pd
     import xgboost as xgb
     import joblib
     import json
 
-    from sklearn.metrics import accuracy_score
+    from sklearn.metrics import accuracy_score, confusion_matrix, recall_score, log_loss
 
     learning_rate = best_params_metrics.metadata.get("lr")
     n_estimators = best_params_metrics.metadata.get("ne")
@@ -1146,6 +1148,16 @@ def run_xgboost_train(
     data['accuracy'] = xgb_accuracy
     data['model_path'] = model.path
 
+    conf_mtx = confusion_matrix(y_train_df.values, preds)
+    accuracy = xgb_accuracy
+    recall = recall_score(y_train_df.values, preds)
+    loss = log_loss(y_train_df.values, preds)
+
+    confusion_metrics.log_confusion_matrix(["Yes", "No"], conf_mtx)
+    metrics.log_metric("accuracy", accuracy)
+    metrics.log_metric("recall", recall)
+    metrics.log_metric("loss", loss)
+
     with open(file=file.path, mode='w', encoding='utf8') as file:
         json.dump(data, file, indent=4)
 
@@ -1160,13 +1172,15 @@ def run_random_forest_train(
     y_train: Input[Dataset], 
     y_test: Input[Dataset], 
     model: Output[Model], 
-    file: Output[Artifact]
+    file: Output[Artifact], 
+    confusion_metrics: Output[ClassificationMetrics], 
+    metrics: Output[Metrics]
 ):
     import pandas as pd
     import joblib
     import json
 
-    from sklearn.metrics import accuracy_score
+    from sklearn.metrics import accuracy_score, confusion_matrix, recall_score, log_loss
     from sklearn.ensemble import RandomForestClassifier
 
     n_estimators = best_params_metrics.metadata.get("ne")
@@ -1179,8 +1193,8 @@ def run_random_forest_train(
     rfc = RandomForestClassifier(n_estimators=n_estimators)
     rfc.fit(x_train_df.values, y_train_df.values.ravel())
 
-    rfc.predict(x_test_df.values)
-    rfc_accuracy = rfc.score(x_test_df.values, y_test_df.values)
+    preds = rfc.predict(x_test_df.values)
+    rfc_accuracy = accuracy_score(y_test_df.values, preds)
 
     # Save the model
     joblib.dump(rfc, model.path)
@@ -1188,6 +1202,16 @@ def run_random_forest_train(
     data = {}
     data['accuracy'] = rfc_accuracy
     data['model_path'] = model.path
+
+    conf_mtx = confusion_matrix(y_train_df.values, preds)
+    accuracy = rfc_accuracy
+    recall = recall_score(y_train_df.values, preds)
+    loss = log_loss(y_train_df.values, preds)
+
+    confusion_metrics.log_confusion_matrix(["Yes", "No"], conf_mtx)
+    metrics.log_metric("accuracy", accuracy)
+    metrics.log_metric("recall", recall)
+    metrics.log_metric("loss", loss)
 
     with open(file=file.path, mode='w', encoding='utf8') as file:
         json.dump(data, file, indent=4)
@@ -1203,13 +1227,15 @@ def run_knn_train(
     y_train: Input[Dataset], 
     y_test: Input[Dataset], 
     model: Output[Model], 
-    file: Output[Artifact]
+    file: Output[Artifact], 
+    confusion_metrics: Output[ClassificationMetrics], 
+    metrics: Output[Metrics]
 ):
     import pandas as pd
     import joblib
     import json
 
-    from sklearn.metrics import accuracy_score
+    from sklearn.metrics import accuracy_score, confusion_matrix, recall_score, log_loss
     from sklearn.neighbors import KNeighborsClassifier
 
     n_neighbors = best_params_metrics.metadata.get("nn")
@@ -1224,14 +1250,24 @@ def run_knn_train(
     )
     knn_model.fit(x_train_df.values, y_train_df.values.ravel())
 
-    y_pred = knn_model.predict(x_test_df.values)
-    accuracy = accuracy_score(y_test_df.values, y_pred)
+    preds = knn_model.predict(x_test_df.values)
+    knn_accuracy = accuracy_score(y_test_df.values, preds)
+
+    conf_mtx = confusion_matrix(y_train_df.values, preds)
+    accuracy = knn_accuracy
+    recall = recall_score(y_train_df.values, preds)
+    loss = log_loss(y_train_df.values, preds)
+
+    confusion_metrics.log_confusion_matrix(["Yes", "No"], conf_mtx)
+    metrics.log_metric("accuracy", accuracy)
+    metrics.log_metric("recall", recall)
+    metrics.log_metric("loss", loss)
 
     # Save the model
     joblib.dump(knn_model, model.path)
 
     data = {}
-    data['accuracy'] = accuracy
+    data['accuracy'] = knn_accuracy
     data['model_path'] = model.path
 
     with open(file=file.path, mode='w', encoding='utf8') as file:
@@ -1248,13 +1284,15 @@ def run_lr_train(
     y_train: Input[Dataset], 
     y_test: Input[Dataset], 
     model: Output[Model], 
-    file: Output[Artifact]
+    file: Output[Artifact], 
+    confusion_metrics: Output[ClassificationMetrics], 
+    metrics: Output[Metrics]
 ):
     import pandas as pd
     import joblib
     import json
 
-    from sklearn.metrics import accuracy_score
+    from sklearn.metrics import accuracy_score, confusion_matrix, recall_score, log_loss
     from sklearn.linear_model import LogisticRegression
 
     iterators = best_params_metrics.metadata.get("it")
@@ -1270,15 +1308,25 @@ def run_lr_train(
     )
     lr_model.fit(x_train_df.values, y_train_df.values.ravel())
 
-    y_pred = lr_model.predict(x_test_df.values)
-    accuracy = accuracy_score(y_test_df.values, y_pred)
+    preds = lr_model.predict(x_test_df.values)
+    lr_accuracy = accuracy_score(y_test_df.values, preds)
 
     # Save the model
     joblib.dump(lr_model, model.path)
 
     data = {}
-    data['accuracy'] = accuracy
+    data['accuracy'] = lr_accuracy
     data['model_path'] = model.path
+
+    conf_mtx = confusion_matrix(y_train_df.values, preds)
+    accuracy = lr_accuracy
+    recall = recall_score(y_train_df.values, preds)
+    loss = log_loss(y_train_df.values, preds)
+
+    confusion_metrics.log_confusion_matrix(["Yes", "No"], conf_mtx)
+    metrics.log_metric("accuracy", accuracy)
+    metrics.log_metric("recall", recall)
+    metrics.log_metric("loss", loss)
 
     with open(file=file.path, mode='w', encoding='utf8') as file:
         json.dump(data, file, indent=4)
@@ -1515,4 +1563,4 @@ def compose_pipeline(
     )
 
 if __name__ == "__main__":
-    compiler.Compiler().compile(compose_pipeline, "../compose_pipeline.yaml")
+    compiler.Compiler().compile(compose_pipeline, "../compose_pipeline_mtx.yaml")
