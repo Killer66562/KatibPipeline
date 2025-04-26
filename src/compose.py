@@ -1148,12 +1148,12 @@ def run_xgboost_train(
     data['accuracy'] = xgb_accuracy
     data['model_path'] = model.path
 
-    conf_mtx = confusion_matrix(y_train_df.values, preds)
+    conf_mtx = confusion_matrix(y_test_df.values.tolist(), preds).tolist()
     accuracy = xgb_accuracy
-    recall = recall_score(y_train_df.values, preds)
-    loss = log_loss(y_train_df.values, preds)
+    recall = recall_score(y_test_df.values, preds)
+    loss = log_loss(y_test_df.values, preds)
 
-    confusion_metrics.log_confusion_matrix(["Yes", "No"], conf_mtx)
+    confusion_metrics.log_confusion_matrix(["No", "Yes"], conf_mtx)
     metrics.log_metric("accuracy", accuracy)
     metrics.log_metric("recall", recall)
     metrics.log_metric("loss", loss)
@@ -1203,12 +1203,12 @@ def run_random_forest_train(
     data['accuracy'] = rfc_accuracy
     data['model_path'] = model.path
 
-    conf_mtx = confusion_matrix(y_train_df.values, preds)
+    conf_mtx = confusion_matrix(y_test_df.values.tolist(), preds).tolist()
     accuracy = rfc_accuracy
-    recall = recall_score(y_train_df.values, preds)
-    loss = log_loss(y_train_df.values, preds)
+    recall = recall_score(y_test_df.values, preds)
+    loss = log_loss(y_test_df.values, preds)
 
-    confusion_metrics.log_confusion_matrix(["Yes", "No"], conf_mtx)
+    confusion_metrics.log_confusion_matrix(["No", "Yes"], conf_mtx)
     metrics.log_metric("accuracy", accuracy)
     metrics.log_metric("recall", recall)
     metrics.log_metric("loss", loss)
@@ -1253,12 +1253,12 @@ def run_knn_train(
     preds = knn_model.predict(x_test_df.values)
     knn_accuracy = accuracy_score(y_test_df.values, preds)
 
-    conf_mtx = confusion_matrix(y_train_df.values, preds)
+    conf_mtx = confusion_matrix(y_test_df.values.tolist(), preds).tolist()
     accuracy = knn_accuracy
-    recall = recall_score(y_train_df.values, preds)
-    loss = log_loss(y_train_df.values, preds)
+    recall = recall_score(y_test_df.values, preds)
+    loss = log_loss(y_test_df.values, preds)
 
-    confusion_metrics.log_confusion_matrix(["Yes", "No"], conf_mtx)
+    confusion_metrics.log_confusion_matrix(["No", "Yes"], conf_mtx)
     metrics.log_metric("accuracy", accuracy)
     metrics.log_metric("recall", recall)
     metrics.log_metric("loss", loss)
@@ -1318,12 +1318,12 @@ def run_lr_train(
     data['accuracy'] = lr_accuracy
     data['model_path'] = model.path
 
-    conf_mtx = confusion_matrix(y_train_df.values, preds)
+    conf_mtx = confusion_matrix(y_test_df.values.tolist(), preds).tolist()
     accuracy = lr_accuracy
-    recall = recall_score(y_train_df.values, preds)
-    loss = log_loss(y_train_df.values, preds)
+    recall = recall_score(y_test_df.values, preds)
+    loss = log_loss(y_test_df.values, preds)
 
-    confusion_metrics.log_confusion_matrix(["Yes", "No"], conf_mtx)
+    confusion_metrics.log_confusion_matrix(["No", "Yes"], conf_mtx)
     metrics.log_metric("accuracy", accuracy)
     metrics.log_metric("recall", recall)
     metrics.log_metric("loss", loss)

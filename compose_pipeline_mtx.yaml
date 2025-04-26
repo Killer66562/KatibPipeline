@@ -795,10 +795,10 @@ deploymentSpec:
           \n    knn_model = KNeighborsClassifier(\n        n_neighbors=n_neighbors\n\
           \    )\n    knn_model.fit(x_train_df.values, y_train_df.values.ravel())\n\
           \n    preds = knn_model.predict(x_test_df.values)\n    knn_accuracy = accuracy_score(y_test_df.values,\
-          \ preds)\n\n    conf_mtx = confusion_matrix(y_train_df.values, preds)\n\
-          \    accuracy = knn_accuracy\n    recall = recall_score(y_train_df.values,\
-          \ preds)\n    loss = log_loss(y_train_df.values, preds)\n\n    confusion_metrics.log_confusion_matrix([\"\
-          Yes\", \"No\"], conf_mtx)\n    metrics.log_metric(\"accuracy\", accuracy)\n\
+          \ preds)\n\n    conf_mtx = confusion_matrix(y_test_df.values.tolist(), preds).tolist()\n\
+          \    accuracy = knn_accuracy\n    recall = recall_score(y_test_df.values,\
+          \ preds)\n    loss = log_loss(y_test_df.values, preds)\n\n    confusion_metrics.log_confusion_matrix([\"\
+          No\", \"Yes\"], conf_mtx)\n    metrics.log_metric(\"accuracy\", accuracy)\n\
           \    metrics.log_metric(\"recall\", recall)\n    metrics.log_metric(\"loss\"\
           , loss)\n\n    # Save the model\n    joblib.dump(knn_model, model.path)\n\
           \n    data = {}\n    data['accuracy'] = knn_accuracy\n    data['model_path']\
@@ -982,10 +982,10 @@ deploymentSpec:
           \n    preds = lr_model.predict(x_test_df.values)\n    lr_accuracy = accuracy_score(y_test_df.values,\
           \ preds)\n\n    # Save the model\n    joblib.dump(lr_model, model.path)\n\
           \n    data = {}\n    data['accuracy'] = lr_accuracy\n    data['model_path']\
-          \ = model.path\n\n    conf_mtx = confusion_matrix(y_train_df.values, preds)\n\
-          \    accuracy = lr_accuracy\n    recall = recall_score(y_train_df.values,\
-          \ preds)\n    loss = log_loss(y_train_df.values, preds)\n\n    confusion_metrics.log_confusion_matrix([\"\
-          Yes\", \"No\"], conf_mtx)\n    metrics.log_metric(\"accuracy\", accuracy)\n\
+          \ = model.path\n\n    conf_mtx = confusion_matrix(y_test_df.values.tolist(),\
+          \ preds).tolist()\n    accuracy = lr_accuracy\n    recall = recall_score(y_test_df.values,\
+          \ preds)\n    loss = log_loss(y_test_df.values, preds)\n\n    confusion_metrics.log_confusion_matrix([\"\
+          No\", \"Yes\"], conf_mtx)\n    metrics.log_metric(\"accuracy\", accuracy)\n\
           \    metrics.log_metric(\"recall\", recall)\n    metrics.log_metric(\"loss\"\
           , loss)\n\n    with open(file=file.path, mode='w', encoding='utf8') as file:\n\
           \        json.dump(data, file, indent=4)\n\n"
@@ -1169,13 +1169,13 @@ deploymentSpec:
           \    rfc_accuracy = accuracy_score(y_test_df.values, preds)\n\n    # Save\
           \ the model\n    joblib.dump(rfc, model.path)\n\n    data = {}\n    data['accuracy']\
           \ = rfc_accuracy\n    data['model_path'] = model.path\n\n    conf_mtx =\
-          \ confusion_matrix(y_train_df.values, preds)\n    accuracy = rfc_accuracy\n\
-          \    recall = recall_score(y_train_df.values, preds)\n    loss = log_loss(y_train_df.values,\
-          \ preds)\n\n    confusion_metrics.log_confusion_matrix([\"Yes\", \"No\"\
-          ], conf_mtx)\n    metrics.log_metric(\"accuracy\", accuracy)\n    metrics.log_metric(\"\
-          recall\", recall)\n    metrics.log_metric(\"loss\", loss)\n\n    with open(file=file.path,\
-          \ mode='w', encoding='utf8') as file:\n        json.dump(data, file, indent=4)\n\
-          \n"
+          \ confusion_matrix(y_test_df.values.tolist(), preds).tolist()\n    accuracy\
+          \ = rfc_accuracy\n    recall = recall_score(y_test_df.values, preds)\n \
+          \   loss = log_loss(y_test_df.values, preds)\n\n    confusion_metrics.log_confusion_matrix([\"\
+          No\", \"Yes\"], conf_mtx)\n    metrics.log_metric(\"accuracy\", accuracy)\n\
+          \    metrics.log_metric(\"recall\", recall)\n    metrics.log_metric(\"loss\"\
+          , loss)\n\n    with open(file=file.path, mode='w', encoding='utf8') as file:\n\
+          \        json.dump(data, file, indent=4)\n\n"
         image: python:3.10-slim
     exec-run-xgboost-katib-experiment:
       container:
@@ -1379,10 +1379,10 @@ deploymentSpec:
           \ predictions)\n    print('XGBoost Test accuracy:', xgb_accuracy)\n\n  \
           \  # Save the model\n    joblib.dump(xgb_model, model.path)\n\n     # Save\
           \ the accuracy\n    data = {}\n    data['accuracy'] = xgb_accuracy\n   \
-          \ data['model_path'] = model.path\n\n    conf_mtx = confusion_matrix(y_train_df.values,\
-          \ preds)\n    accuracy = xgb_accuracy\n    recall = recall_score(y_train_df.values,\
-          \ preds)\n    loss = log_loss(y_train_df.values, preds)\n\n    confusion_metrics.log_confusion_matrix([\"\
-          Yes\", \"No\"], conf_mtx)\n    metrics.log_metric(\"accuracy\", accuracy)\n\
+          \ data['model_path'] = model.path\n\n    conf_mtx = confusion_matrix(y_test_df.values.tolist(),\
+          \ preds).tolist()\n    accuracy = xgb_accuracy\n    recall = recall_score(y_test_df.values,\
+          \ preds)\n    loss = log_loss(y_test_df.values, preds)\n\n    confusion_metrics.log_confusion_matrix([\"\
+          No\", \"Yes\"], conf_mtx)\n    metrics.log_metric(\"accuracy\", accuracy)\n\
           \    metrics.log_metric(\"recall\", recall)\n    metrics.log_metric(\"loss\"\
           , loss)\n\n    with open(file=file.path, mode='w', encoding='utf8') as file:\n\
           \        json.dump(data, file, indent=4)\n\n"
