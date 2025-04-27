@@ -1443,7 +1443,7 @@ def change_model(
 )
 def compose_pipeline(
     params_pvc_name: str = "params-pvc", 
-    params_json_file_path: str = "/mnt/params/params_heart_disease.json", 
+    params_json_file_path: str = "/mnt/params/params_diabetes.json", 
     models_pvc_name: str = "models-pvc"
 ):
     sparkapplication_dict = get_spark_job_definition()
@@ -1466,10 +1466,10 @@ def compose_pipeline(
     check_sparkapplication_status_task.set_caching_options(enable_caching=False)
 
     load_datasets_task = load_file_from_nas_to_minio(
-        x_train_input_path="/mnt/datasets/heart_disease/x_train.csv", 
-        x_test_input_path="/mnt/datasets/heart_disease/x_test.csv", 
-        y_train_input_path="/mnt/datasets/heart_disease/y_train.csv", 
-        y_test_input_path="/mnt/datasets/heart_disease/y_test.csv", 
+        x_train_input_path="/mnt/datasets/diabetes/x_train.csv", 
+        x_test_input_path="/mnt/datasets/diabetes/x_test.csv", 
+        y_train_input_path="/mnt/datasets/diabetes/y_train.csv", 
+        y_test_input_path="/mnt/datasets/diabetes/y_test.csv", 
     ).after(check_sparkapplication_status_task)
     load_datasets_task.set_caching_options(enable_caching=False)
 
