@@ -5,6 +5,23 @@
 #    models_pvc_name: str [Default: 'models-pvc']
 #    params_json_file_path: str [Default: '/mnt/params/params_heart_disease.json']
 #    params_pvc_name: str [Default: 'params-pvc']
+# Outputs:
+#    parse-input-json-knn_input_metrics: system.Metrics
+#    parse-input-json-lr_input_metrics: system.Metrics
+#    parse-input-json-random_forest_input_metrics: system.Metrics
+#    parse-input-json-xgboost_input_metrics: system.Metrics
+#    run-knn-katib-experiment-best_params_metrics: system.Metrics
+#    run-knn-train-confusion_metrics: system.ClassificationMetrics
+#    run-knn-train-metrics: system.Metrics
+#    run-lr-katib-experiment-best_params_metrics: system.Metrics
+#    run-lr-train-confusion_metrics: system.ClassificationMetrics
+#    run-lr-train-metrics: system.Metrics
+#    run-random-forest-katib-experiment-best_params_metrics: system.Metrics
+#    run-random-forest-train-confusion_metrics: system.ClassificationMetrics
+#    run-random-forest-train-metrics: system.Metrics
+#    run-xgboost-katib-experiment-best_params_metrics: system.Metrics
+#    run-xgboost-train-confusion_metrics: system.ClassificationMetrics
+#    run-xgboost-train-metrics: system.Metrics
 components:
   comp-apply-sparkapplication:
     executorLabel: exec-apply-sparkapplication
@@ -402,7 +419,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.2'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.8.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'joblib==1.4.2'\
           \ 'scikit-learn==1.5.1' 'xgboost==2.0.3' && \"$0\" \"$@\"\n"
@@ -468,7 +485,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.2'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.8.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'joblib==1.4.2'\
           \ 'scikit-learn==1.5.1' 'xgboost==2.0.3' && \"$0\" \"$@\"\n"
@@ -520,7 +537,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.2'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.8.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
           $0\" \"$@\"\n"
         - sh
@@ -549,7 +566,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.2'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.8.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'pandas' &&\
           \ \"$0\" \"$@\"\n"
@@ -586,7 +603,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.2'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.8.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
           $0\" \"$@\"\n"
         - sh
@@ -628,7 +645,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.2'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.8.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'kubeflow-katib==0.17.0'\
           \ && \"$0\" \"$@\"\n"
@@ -767,7 +784,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.2'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.8.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'scikit-learn'\
           \ 'joblib' && \"$0\" \"$@\"\n"
@@ -817,7 +834,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.2'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.8.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'kubeflow-katib==0.17.0'\
           \ && \"$0\" \"$@\"\n"
@@ -952,7 +969,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.2'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.8.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'scikit-learn'\
           \ 'joblib' && \"$0\" \"$@\"\n"
@@ -1002,7 +1019,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.2'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.8.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'kubeflow-katib==0.17.0'\
           \ && \"$0\" \"$@\"\n"
@@ -1139,7 +1156,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.2'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.8.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'scikit-learn'\
           \ 'joblib' && \"$0\" \"$@\"\n"
@@ -1189,7 +1206,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.2'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.8.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'kubeflow-katib==0.17.0'\
           \ && \"$0\" \"$@\"\n"
@@ -1346,7 +1363,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.12.2'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.8.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'xgboost'\
           \ 'scikit-learn' 'joblib' && \"$0\" \"$@\"\n"
@@ -1392,6 +1409,72 @@ pipelineInfo:
   name: compose
 root:
   dag:
+    outputs:
+      artifacts:
+        parse-input-json-knn_input_metrics:
+          artifactSelectors:
+          - outputArtifactKey: knn_input_metrics
+            producerSubtask: parse-input-json
+        parse-input-json-lr_input_metrics:
+          artifactSelectors:
+          - outputArtifactKey: lr_input_metrics
+            producerSubtask: parse-input-json
+        parse-input-json-random_forest_input_metrics:
+          artifactSelectors:
+          - outputArtifactKey: random_forest_input_metrics
+            producerSubtask: parse-input-json
+        parse-input-json-xgboost_input_metrics:
+          artifactSelectors:
+          - outputArtifactKey: xgboost_input_metrics
+            producerSubtask: parse-input-json
+        run-knn-katib-experiment-best_params_metrics:
+          artifactSelectors:
+          - outputArtifactKey: best_params_metrics
+            producerSubtask: run-knn-katib-experiment
+        run-knn-train-confusion_metrics:
+          artifactSelectors:
+          - outputArtifactKey: confusion_metrics
+            producerSubtask: run-knn-train
+        run-knn-train-metrics:
+          artifactSelectors:
+          - outputArtifactKey: metrics
+            producerSubtask: run-knn-train
+        run-lr-katib-experiment-best_params_metrics:
+          artifactSelectors:
+          - outputArtifactKey: best_params_metrics
+            producerSubtask: run-lr-katib-experiment
+        run-lr-train-confusion_metrics:
+          artifactSelectors:
+          - outputArtifactKey: confusion_metrics
+            producerSubtask: run-lr-train
+        run-lr-train-metrics:
+          artifactSelectors:
+          - outputArtifactKey: metrics
+            producerSubtask: run-lr-train
+        run-random-forest-katib-experiment-best_params_metrics:
+          artifactSelectors:
+          - outputArtifactKey: best_params_metrics
+            producerSubtask: run-random-forest-katib-experiment
+        run-random-forest-train-confusion_metrics:
+          artifactSelectors:
+          - outputArtifactKey: confusion_metrics
+            producerSubtask: run-random-forest-train
+        run-random-forest-train-metrics:
+          artifactSelectors:
+          - outputArtifactKey: metrics
+            producerSubtask: run-random-forest-train
+        run-xgboost-katib-experiment-best_params_metrics:
+          artifactSelectors:
+          - outputArtifactKey: best_params_metrics
+            producerSubtask: run-xgboost-katib-experiment
+        run-xgboost-train-confusion_metrics:
+          artifactSelectors:
+          - outputArtifactKey: confusion_metrics
+            producerSubtask: run-xgboost-train
+        run-xgboost-train-metrics:
+          artifactSelectors:
+          - outputArtifactKey: metrics
+            producerSubtask: run-xgboost-train
     tasks:
       apply-sparkapplication:
         cachingOptions: {}
@@ -1448,10 +1531,10 @@ root:
           parameters:
             old_model_file_path:
               runtimeValue:
-                constant: /mnt/models/heart_disease_model.json
+                constant: /mnt/models/diabetes_model_metrics.json
             old_model_path:
               runtimeValue:
-                constant: /mnt/models/heart_disease_model.pkl
+                constant: /mnt/models/diabetes_model.pkl
         taskInfo:
           name: change-model
       check-sparkapplication-status:
@@ -1760,8 +1843,74 @@ root:
         defaultValue: params-pvc
         isOptional: true
         parameterType: STRING
+  outputDefinitions:
+    artifacts:
+      parse-input-json-knn_input_metrics:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+      parse-input-json-lr_input_metrics:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+      parse-input-json-random_forest_input_metrics:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+      parse-input-json-xgboost_input_metrics:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+      run-knn-katib-experiment-best_params_metrics:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+      run-knn-train-confusion_metrics:
+        artifactType:
+          schemaTitle: system.ClassificationMetrics
+          schemaVersion: 0.0.1
+      run-knn-train-metrics:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+      run-lr-katib-experiment-best_params_metrics:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+      run-lr-train-confusion_metrics:
+        artifactType:
+          schemaTitle: system.ClassificationMetrics
+          schemaVersion: 0.0.1
+      run-lr-train-metrics:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+      run-random-forest-katib-experiment-best_params_metrics:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+      run-random-forest-train-confusion_metrics:
+        artifactType:
+          schemaTitle: system.ClassificationMetrics
+          schemaVersion: 0.0.1
+      run-random-forest-train-metrics:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+      run-xgboost-katib-experiment-best_params_metrics:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+      run-xgboost-train-confusion_metrics:
+        artifactType:
+          schemaTitle: system.ClassificationMetrics
+          schemaVersion: 0.0.1
+      run-xgboost-train-metrics:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
 schemaVersion: 2.1.0
-sdkVersion: kfp-2.12.2
+sdkVersion: kfp-2.8.0
 ---
 platforms:
   kubernetes:

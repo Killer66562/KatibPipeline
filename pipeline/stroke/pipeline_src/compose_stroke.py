@@ -1551,7 +1551,7 @@ def compose_pipeline(
 
     change_model_task = change_model(
         old_model_path="/mnt/models/stroke_model.pkl", 
-        old_model_file_path="/mnt/models/stroke_model.json", 
+        old_model_file_path="/mnt/models/stroke_model_metrics.json", 
         new_model=choose_model_task.outputs["final_model"], 
         new_model_file=choose_model_task.outputs["result"]
     )
@@ -1563,4 +1563,4 @@ def compose_pipeline(
     )
 
 if __name__ == "__main__":
-    compiler.Compiler().compile(compose_pipeline, "./compose_stroke_pipeline.yaml")
+    compiler.Compiler().compile(compose_pipeline, "../compose_pipeline_stroke.yaml")

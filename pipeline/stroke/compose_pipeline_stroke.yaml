@@ -1531,7 +1531,7 @@ root:
           parameters:
             old_model_file_path:
               runtimeValue:
-                constant: /mnt/models/stroke_model.json
+                constant: /mnt/models/stroke_model_metrics.json
             old_model_path:
               runtimeValue:
                 constant: /mnt/models/stroke_model.pkl
