@@ -1,0 +1,17 @@
+FROM spark:3.5.0
+
+USER root
+
+WORKDIR /home/src
+RUN mkdir /tmp/dataset
+RUN mkdir /tmp/processed_dataset
+RUN chmod 777 /tmp/dataset
+RUN chmod 777 /tmp/processed_dataset
+
+COPY ./pyspark_process_heartDisease_dataset.py .
+COPY ./requirements.txt .
+
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+CMD ["ls", "-la"]
