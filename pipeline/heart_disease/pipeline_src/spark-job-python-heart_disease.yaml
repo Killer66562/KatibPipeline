@@ -26,7 +26,7 @@ spec:
   mode: cluster
   image: "dieway/spark-process-dataset:heartDisease" #change if another disease
   imagePullPolicy: Always
-  mainApplicationFile: "local:///home/src/pyspark_process_heartDiease_dataset.py" #change if another disease
+  mainApplicationFile: "local:///home/src/pyspark_process_heartDisease_dataset.py" #change if another disease
   sparkVersion: 3.5.0
   volumes:
     - name: datasets-pv-sparkoperator
