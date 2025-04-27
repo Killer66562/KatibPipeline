@@ -37,7 +37,7 @@ if __name__ == '__main__':
   df_data = df_data.replace(['Unknown', 'never smoked', 'formerly smoked', 'smokes'], ['0', '0', '1', '1'], 'smoking_status')
 
   #2nd stroke dataset
-  df_data_2 = spark.read.csv('/tmp/dataset/stroke_2.csv', header=True, inferSchema=True)
+  df_data_2 = spark.read.csv('/tmp/dataset/stroke/stroke_2.csv', header=True, inferSchema=True)
   df_data_2 = df_data_2.drop('ever_married', 'work_type')
   df_data_2.withColumnRenamed('sex', 'gender')
 
@@ -62,14 +62,14 @@ if __name__ == '__main__':
     .save("./test.csv")
   '''
 
-  df_data_x = df_data.select('gender', 'age',' hypertension', 'heart_disease', 'Residence_type', 'avg_glucose_level', 'bmi', 'smoking_status').toPandas()
-  df_data_y = df_data.select('stroke')
+  df_data_x = df_data.select('gender', 'age','hypertension', 'heart_disease', 'Residence_type', 'avg_glucose_level', 'bmi', 'smoking_status').toPandas()
+  df_data_y = df_data.select('stroke').toPandas()
   x_train, x_test, y_train, y_test = train_test_split(df_data_x, df_data_y, test_size=0.2, random_state=42)
 
   x_train.to_csv('/tmp/processed_dataset/stroke/x_train.csv', header=True, index=False)
   x_test.to_csv('/tmp/processed_dataset/stroke/x_test.csv', header=True, index=False)
   y_train.to_csv('/tmp/processed_dataset/stroke/y_train.csv', header=True, index=False)
   y_test.to_csv('/tmp/processed_dataset/stroke/y_test.csv', header=True, index=False)
-  df_data.toPandas().to_csv('/tmp/processed_dataset/stroke/processed_stroke_dataset.csv', header=True, index=False)
+  # df_data.toPandas().to_csv('/tmp/processed_dataset/stroke/processed_stroke_dataset.csv', header=True, index=False)
   df_data.show()
 

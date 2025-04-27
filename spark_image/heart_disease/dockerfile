@@ -10,7 +10,7 @@ RUN chmod 777 /tmp/processed_dataset
 
 COPY ./pyspark_process_heartDisease_dataset.py .
 COPY ./requirements.txt .
-
+RUN chmod -R 777 /home/src
 
 RUN pip install --no-cache-dir -r requirements.txt
 

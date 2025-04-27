@@ -42,7 +42,7 @@ if __name__ == '__main__':
   df_data = df_data.withColumn('KidneyDisease', df_data['KidneyDisease'].cast(IntegerType()))
   df_data = df_data.withColumn('SkinCancer', df_data['SkinCancer'].cast(IntegerType()))
 
-  df_data_x = df_data.select('Sex', 'AgeCaategory', 'BMI', 'Smoking', 'AlcoholDrinking', 'Stroke', 'DiffWalking', 'Diabetic', 'PhysicalActivity', 'SleepTime', 'Asthma', 'KidneyDisease', 'SkinCancer').toPandas()
+  df_data_x = df_data.select('Sex', 'AgeCategory', 'BMI', 'Smoking', 'AlcoholDrinking', 'Stroke', 'DiffWalking', 'Diabetic', 'PhysicalActivity', 'SleepTime', 'Asthma', 'KidneyDisease', 'SkinCancer').toPandas()
   df_data_y = df_data.select('HeartDisease').toPandas()
 
   x_train, x_test, y_train, y_test = train_test_split(df_data_x, df_data_y, test_size=0.2, random_state=42)
@@ -51,6 +51,6 @@ if __name__ == '__main__':
   x_test.to_csv('/tmp/processed_dataset/heart_disease/x_test.csv', header=True, index=False)
   y_train.to_csv('/tmp/processed_dataset/heart_disease/y_train.csv', header=True, index=False)
   y_test.to_csv('/tmp/processed_dataset/heart_disease/y_test.csv', header=True, index=False)
-  df_data.toPandas().to_csv('/tmp/processed_dataset/heart_disease/processed_heartDisease_dataset.csv', header=True, index=False)
+  # df_data.toPandas().to_csv('/tmp/processed_dataset/heart_disease/processed_heartDisease_dataset.csv', header=True, index=False)
   df_data.show()
   df_data.printSchema()

@@ -1617,16 +1617,16 @@ root:
           parameters:
             x_test_input_path:
               runtimeValue:
-                constant: /mnt/datasets/heart_disease/x_test.csv
+                constant: /mnt/datasets/stroke/x_test.csv
             x_train_input_path:
               runtimeValue:
-                constant: /mnt/datasets/heart_disease/x_train.csv
+                constant: /mnt/datasets/stroke/x_train.csv
             y_test_input_path:
               runtimeValue:
-                constant: /mnt/datasets/heart_disease/y_test.csv
+                constant: /mnt/datasets/stroke/y_test.csv
             y_train_input_path:
               runtimeValue:
-                constant: /mnt/datasets/heart_disease/y_train.csv
+                constant: /mnt/datasets/stroke/y_train.csv
         taskInfo:
           name: load-file-from-nas-to-minio
       parse-input-json:
