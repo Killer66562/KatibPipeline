@@ -14,7 +14,7 @@ if __name__ == '__main__':
   RESIDENCE_TYPE_MAP = {'Urban': 1, 'Rural': 0}
 
   #gender data process
-  df_data = df_data.filter((df_data['gender'].isNotNull()) & (df_data['gender'] != 'N/A'))
+  df_data = df_data.filter((df_data['gender'].isNotNull()) & (df_data['gender'] != 'N/A') & (df_data['gender'] != 'Other'))
   df_data_ha = df_data.filter((df_data['gender'] == 'Male') | (df_data['gender'] == 'Female'))
   df_data = df_data.replace(['Male', 'Female'], ['0', '1'], 'gender')
 
@@ -39,7 +39,8 @@ if __name__ == '__main__':
   #2nd stroke dataset
   df_data_2 = spark.read.csv('/tmp/dataset/stroke/stroke_2.csv', header=True, inferSchema=True)
   df_data_2 = df_data_2.drop('ever_married', 'work_type')
-  df_data_2.withColumnRenamed('sex', 'gender')
+  df_data_2 = df_data_2.withColumnRenamed('sex', 'gender')
+  df_data_2 = df_data_2.filter(df_data_2['gender'].isNotNull())
 
   df_data = df_data.union(df_data_2)
 

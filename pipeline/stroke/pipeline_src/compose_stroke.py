@@ -1292,7 +1292,7 @@ def run_lr_train(
     import joblib
     import json
 
-    from sklearn.metrics import accuracy_score
+    from sklearn.metrics import accuracy_score, confusion_matrix, recall_score, log_loss
     from sklearn.linear_model import LogisticRegression
 
     iterators = best_params_metrics.metadata.get("it")

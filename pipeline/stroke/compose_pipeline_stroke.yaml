@@ -989,17 +989,17 @@ deploymentSpec:
           \ Input[Dataset], \n    y_test: Input[Dataset], \n    model: Output[Model],\
           \ \n    file: Output[Artifact],\n    confusion_metrics: Output[ClassificationMetrics],\
           \ \n    metrics: Output[Metrics]\n):\n    import pandas as pd\n    import\
-          \ joblib\n    import json\n\n    from sklearn.metrics import accuracy_score\n\
-          \    from sklearn.linear_model import LogisticRegression\n\n    iterators\
-          \ = best_params_metrics.metadata.get(\"it\")\n\n    x_train_df = pd.read_csv(x_train.path)\n\
-          \    y_train_df = pd.read_csv(y_train.path)\n    x_test_df = pd.read_csv(x_test.path)\n\
-          \    y_test_df = pd.read_csv(y_test.path)\n\n    lr_model = LogisticRegression(\n\
-          \        random_state=0, \n        max_iter=iterators\n    )\n    lr_model.fit(x_train_df.values,\
-          \ y_train_df.values.ravel())\n\n    preds = lr_model.predict(x_test_df.values)\n\
-          \    lr_accuracy = accuracy_score(y_test_df.values, preds)\n\n    conf_mtx\
-          \ = confusion_matrix(y_test_df.values.tolist(), preds).tolist()\n    accuracy\
-          \ = lr_accuracy\n    recall = recall_score(y_test_df.values, preds)\n  \
-          \  loss = log_loss(y_test_df.values, preds)\n\n    confusion_metrics.log_confusion_matrix([\"\
+          \ joblib\n    import json\n\n    from sklearn.metrics import accuracy_score,\
+          \ confusion_matrix, recall_score, log_loss\n    from sklearn.linear_model\
+          \ import LogisticRegression\n\n    iterators = best_params_metrics.metadata.get(\"\
+          it\")\n\n    x_train_df = pd.read_csv(x_train.path)\n    y_train_df = pd.read_csv(y_train.path)\n\
+          \    x_test_df = pd.read_csv(x_test.path)\n    y_test_df = pd.read_csv(y_test.path)\n\
+          \n    lr_model = LogisticRegression(\n        random_state=0, \n       \
+          \ max_iter=iterators\n    )\n    lr_model.fit(x_train_df.values, y_train_df.values.ravel())\n\
+          \n    preds = lr_model.predict(x_test_df.values)\n    lr_accuracy = accuracy_score(y_test_df.values,\
+          \ preds)\n\n    conf_mtx = confusion_matrix(y_test_df.values.tolist(), preds).tolist()\n\
+          \    accuracy = lr_accuracy\n    recall = recall_score(y_test_df.values,\
+          \ preds)\n    loss = log_loss(y_test_df.values, preds)\n\n    confusion_metrics.log_confusion_matrix([\"\
           No\", \"Yes\"], conf_mtx)\n    metrics.log_metric(\"accuracy\", accuracy)\n\
           \    metrics.log_metric(\"recall\", recall)\n    metrics.log_metric(\"loss\"\
           , loss)\n\n    # Save the model\n    joblib.dump(lr_model, model.path)\n\
