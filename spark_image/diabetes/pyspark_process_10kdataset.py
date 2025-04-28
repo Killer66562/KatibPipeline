@@ -3,8 +3,17 @@ from pyspark.sql.functions import col, when, mean, round
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType, DecimalType, FloatType
 from sklearn.model_selection import train_test_split
 import os
+from functools import reduce
 
 if __name__ == "__main__":
+  '''
+  + /tmp/dataset/diabetes/10k.csv
+  + /tmp/dataset/diabetes/split_45k.csv
+  + /tmp/dataset/diabetes/split_90k.csv
+  + /tmp/dataset/diabetes/split_135k.csv
+  + /tmp/dataset/diabetes/split_180k.csv
+  '''
+
   spark = SparkSession.builder.appName('pyspark-process-10kDataset').getOrCreate()
   #dataset_path = os.getenv("datasetPath")
   df_data = spark.read.csv('/tmp/dataset/diabetes/10k.csv', header=True, inferSchema=True)
@@ -38,6 +47,22 @@ if __name__ == "__main__":
   df_data = df_data.withColumn('bmi', round(df_data['bmi'], 2))
   df_data = df_data.withColumn('HbA1c_level', round(df_data['HbA1c_level'], 1))
   df_data = df_data.withColumn('blood_glucose_level', round(df_data['blood_glucose_level'], 2))
+  
+  # ---------------------- dataset_2 -----------------------------------
+  
+  DATASETS_PATH_LIST = ["/tmp/dataset/diabetes/split_45k.csv",
+   			 "/tmp/dataset/diabetes/split_90k.csv",
+   			 "/tmp/dataset/diabetes/split_135k.csv",
+   			 "/tmp/dataset/diabetes/split_180k.csv",]
+  df_list = [spark.read.csv(path, header=True, inferSchema=True) for path in DATASETS_PATH_LIST]
+  df_data_2 = reduce(lambda df1, df2: df1.union(df2), df_list)
+  df_data_2 = df_data_2.withColumn('age', round(df_data_2['age'], 2))
+  df_data_2 = df_data_2.withColumn('bmi', round(df_data_2['bmi'], 2))
+  df_data_2 = df_data_2.withColumn('HbA1c_level', round(df_data_2['HbA1c_level'], 1))
+  df_data_2 = df_data_2.withColumn('blood_glucose_level', round(df_data_2['blood_glucose_level'], 2))
+  
+  # merge datasets
+  df_data = df_data.union(df_data_2)
     
   df_data.show()
   df_data.printSchema()
