@@ -1,0 +1,21 @@
+name: Apply sparkapplication
+inputs:
+  - {name: Object, type: String}
+  - {name: Name, type: String}
+metadata:
+  annotations:
+    app: apply-spark-job
+implementation:
+  container:
+    image: dieway/kubectl:1.29.8
+    command:
+      - bash
+      - -exc
+      - |
+        object_path=$0
+        echo "$object_path" > "SparkJob.yaml"
+        sed -i "s|spark-app-name|$1|g" SparkJob.yaml
+        cat SparkJob.yaml
+        kubectl apply -f SparkJob.yaml
+      - {inputValue: Object}
+      - {inputValue: Name}
